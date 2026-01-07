@@ -1,0 +1,92 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  password     String
+  is_developer Boolean   @default(false)
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+  workflows    Workflow[]
+  accounts     Account[]
+}
+
+model Account {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  type        String // e.g., "NAVER_IMAP"
+  credentials String // Encrypted credentials
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+model Workflow {
+  id         String    @id @default(cuid())
+  name       String
+  is_active  Boolean   @default(true)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  trigger    Trigger?
+  actions    Action[]
+  logs       Log[]
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+}
+
+model Trigger {
+  id          String     @id @default(cuid())
+  workflow    Workflow   @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowId  String     @unique
+  type        String // "IMAP_POLLING" or "WEBHOOK"
+  config      Json
+  rules       Rule[]
+  created_at  DateTime   @default(now())
+  updated_at  DateTime   @updatedAt
+}
+
+model Rule {
+  id         String   @id @default(cuid())
+  trigger    Trigger  @relation(fields: [triggerId], references: [id], onDelete: Cascade)
+  triggerId  String
+  // Since we only support AND, we can have multiple rules per trigger
+  field      String // e.g., "subject", "from"
+  operator   String // "contains", "equals"
+  value      String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model Action {
+  id          String   @id @default(cuid())
+  workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowId  String
+  type        String // "DISCORD_WEBHOOK", "NOTION_PAGE"
+  config      Json
+  order       Int // For sequential execution
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([workflowId, order])
+}
+
+model Log {
+  id           String    @id @default(cuid())
+  workflow     Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowId   String
+  status       String // "SUCCESS", "FAILURE", "RETRYING"
+  message      String    @db.Text
+  context      Json?
+  created_at   DateTime  @default(now())
+
+  @@index([workflowId, created_at])
+}

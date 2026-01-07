@@ -1,0 +1,17 @@
+{
+  "name": "atomaton",
+  "private": true,
+  "scripts": {
+    "build": "pnpm --filter \"./apps/**\" build",
+    "dev": "pnpm --parallel --filter \"./apps/**\" dev",
+    "lint": "pnpm --filter \"./**\" lint",
+    "test": "pnpm --filter \"./**\" test"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.0.0"
+  },
+  "packageManager": "pnpm@8.15.5"
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@atomaton/config",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "files": [
+    "eslint-preset.js",
+    "tsconfig.json"
+  ],
+  "license": "MIT"
+}

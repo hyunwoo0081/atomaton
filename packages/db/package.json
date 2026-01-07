@@ -1,0 +1,11 @@
+{
+  "name": "@atomaton/db",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "license": "MIT"
+}
