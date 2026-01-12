@@ -10,6 +10,10 @@
     "lint": "echo \"Error: no lint specified\" && exit 1"
   },
   "dependencies": {
-    "react": "^18.2.0"
+    "react": "^19.2.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7",
+    "typescript": "~5.9.3"
   }
 }

@@ -1,5 +1,4 @@
 {
-  "extends": "@atomaton/config/tsconfig.json",
   "compilerOptions": {
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
@@ -7,5 +6,8 @@
     "allowJs": true
   },
   "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
 }

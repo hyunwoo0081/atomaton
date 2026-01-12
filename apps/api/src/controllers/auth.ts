@@ -61,7 +61,14 @@ export const login = async (req: Request, res: Response) => {
       { expiresIn: JWT_EXPIRES_IN }
     );
 
-    res.status(200).json({ token });
+    res.status(200).json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        is_developer: user.is_developer
+      }
+    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Internal server error' });
