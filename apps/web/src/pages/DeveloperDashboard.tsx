@@ -16,21 +16,6 @@ interface SystemStats {
   }[];
 }
 
-// Mock Data for development without backend API
-const MOCK_STATS: SystemStats = {
-  overview: {
-    totalUsers: 120,
-    totalWorkflows: 450,
-    activeWorkflows: 380,
-    successRate: '98.5%',
-  },
-  problematicWorkflows: [
-    { id: 'wf-1', name: 'Email to Notion Sync', failureCount: 15 },
-    { id: 'wf-2', name: 'Daily Report', failureCount: 8 },
-    { id: 'wf-3', name: 'Discord Alert', failureCount: 5 },
-  ],
-};
-
 export const DeveloperDashboard: React.FC = () => {
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,17 +26,11 @@ export const DeveloperDashboard: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // const data = await api.get<SystemStats>('/admin/stats');
-      // setStats(data);
-      
-      // Simulate API delay
-      setTimeout(() => {
-        setStats(MOCK_STATS);
-        setLoading(false);
-      }, 500);
+      const data = await api.get<SystemStats>('/admin/stats');
+      setStats(data);
     } catch (error) {
       console.error('Failed to fetch system stats:', error);
+    } finally {
       setLoading(false);
     }
   };
@@ -114,6 +93,11 @@ export const DeveloperDashboard: React.FC = () => {
                 </div>
               </li>
             ))}
+            {stats.problematicWorkflows.length === 0 && (
+              <li className="px-4 py-4 sm:px-6 text-center text-gray-500">
+                No problematic workflows found.
+              </li>
+            )}
           </ul>
         </div>
       </section>
