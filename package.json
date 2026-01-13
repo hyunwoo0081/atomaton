@@ -9,7 +9,8 @@
     "build:api": "pnpm --filter @atomaton/api build",
     "build:web": "pnpm --filter @atomaton/web build",
     "lint": "pnpm --filter \"./**\" lint",
-    "test": "pnpm --filter \"./**\" test"
+    "test": "pnpm --filter \"./**\" test",
+    "test:e2e": "pnpm --filter @atomaton/web test:e2e"
   },
   "devDependencies": {
     "eslint": "^8.57.1",
