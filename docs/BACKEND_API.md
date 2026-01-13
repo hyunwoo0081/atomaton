@@ -67,7 +67,16 @@ Retrieves execution logs. Requires authentication.
   - Retrieve logs with pagination.
   - Query Params: `workflowId` (optional), `page` (default 1), `limit` (default 25).
 
-### 6. Miscellaneous
+### 6. Admin (`/admin`)
+Developer-only endpoints for system monitoring. Requires authentication and developer privileges.
+
+- **GET** `/admin/stats`
+  - Retrieves system-wide statistics.
+  - Returns:
+    - `overview`: Total users, workflows, active workflows, success rate.
+    - `problematicWorkflows`: Top 5 workflows with the most failures.
+
+### 7. Miscellaneous
 - **GET** `/`
   - Health check. Returns "Atomaton API is running!".
 - **GET** `/protected`

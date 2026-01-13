@@ -4,6 +4,7 @@ import authRouter from './routes/auth';
 import workflowRouter from './routes/workflow';
 import accountRouter from './routes/account';
 import webhookRouter from './routes/webhook';
+import adminRouter from './routes/admin'; // Import admin router
 import { authenticateToken } from './middleware/auth';
 import { setProcessor } from './executors/queue';
 import { executeWorkflow } from './executors/executor';
@@ -22,6 +23,7 @@ app.use('/auth', authRouter);
 app.use('/workflows', workflowRouter);
 app.use('/accounts', accountRouter);
 app.use('/webhook', webhookRouter);
+app.use('/admin', adminRouter); // Register admin router
 
 app.get('/protected', authenticateToken, (req: Request, res: Response) => {
   res.json({ message: `Welcome ${req.userId}! You are ${req.isDeveloper ? 'a developer' : 'a regular user'}.` });
