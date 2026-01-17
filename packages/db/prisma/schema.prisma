@@ -7,6 +7,8 @@ generator client {
 
 datasource db {
   provider = "mysql"
+  url      = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 model User {
@@ -25,7 +27,7 @@ model Account {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId      String
   type        String // e.g., "NAVER_IMAP"
-  credentials String // Encrypted credentials
+  credentials Json // Encrypted credentials
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 }
@@ -79,13 +81,24 @@ model Action {
   @@index([workflowId, order])
 }
 
+enum LogStatus {
+  SUCCESS
+  FAILURE
+  SKIPPED
+  ENQUEUED
+}
+
 model Log {
   id           String    @id @default(cuid())
   workflow     Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   workflowId   String
-  status       String // "SUCCESS", "FAILURE", "RETRYING"
+  triggerId    String?
+  actionId     String?
+  status       LogStatus // "SUCCESS", "FAILURE", "SKIPPED", "ENQUEUED"
   message      String    @db.Text
   context      Json?
+  source       String?
+  executionId  String?
   created_at   DateTime  @default(now())
 
   @@index([workflowId, created_at])

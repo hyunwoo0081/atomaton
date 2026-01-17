@@ -24,7 +24,7 @@ const getImapConnectionDetails = async (accountId: string) => {
     throw new Error('IMAP account not found or invalid type.');
   }
 
-  const credentials = JSON.parse(account.credentials as string);
+  const credentials = account.credentials as any;
   const decryptedPassword = decrypt(credentials.password); // Use the crypto service
 
   return {
@@ -81,98 +81,104 @@ export const startImapPolling = async (accountId: string, intervalMin: number, r
             });
 
             fetch.on('message', (msg, seqno) => {
-              const prefix = `(#${seqno}) `;
+              let uid: number;
+              let headers: any;
+              let buffer = '';
+
               msg.on('body', async (stream, info) => {
-                let buffer = '';
                 stream.on('data', (chunk) => {
                   buffer += chunk.toString('utf8');
                 });
-                stream.once('end', async () => {
-                  const headers = Imap.parseHeader(buffer);
-                  const messageId = headers['message-id'] ? headers['message-id'][0] : null;
-
-                  // Find the associated workflow and trigger
-                  const trigger = await prisma.trigger.findFirst({
-                    where: {
-                      config: {
-                        path: ['accountId'],
-                        equals: accountId
-                      },
-                      type: 'IMAP_POLLING'
-                    },
-                    select: {
-                      id: true,
-                      workflowId: true
-                    }
-                  });
-
-                  if (!trigger) {
-                    console.error(`No IMAP_POLLING trigger found for account ${accountId}. Skipping email processing.`);
-                    imap.addFlags(msg.uid, ['Seen'], (err) => {
-                        if (err) console.error(`Error marking email ${msg.uid} as seen:`, err);
-                      });
-                    return;
-                  }
-
-                  if (messageId) {
-                    const existingLog = await prisma.log.findFirst({
-                      where: { message: messageId, source: 'NAVER_IMAP' },
-                    });
-
-                    if (existingLog) {
-                      console.log(`Email with Message-ID ${messageId} already processed. Skipping.`);
-                      imap.addFlags(msg.uid, ['Seen'], (err) => {
-                        if (err) console.error(`Error marking email ${msg.uid} as seen:`, err);
-                      });
-                      return;
-                    }
-                  }
-
-                  const emailData = {
-                    messageId: messageId,
-                    uid: msg.uid,
-                    receivedAt: headers.date ? new Date(headers.date[0]).toISOString() : new Date().toISOString(),
-                    source: 'NAVER_IMAP',
-                    accountId: accountId,
-                    subject: headers.subject ? headers.subject[0] : 'No Subject',
-                    from: headers.from ? headers.from[0] : 'Unknown',
-                  };
-                  console.log('Processed email:', emailData);
-
-                  const executionId = uuidv4();
-                  const workflowContext: WorkflowContext = {
-                    triggerId: trigger.id,
-                    workflowId: trigger.workflowId,
-                    executionId: executionId,
-                    data: emailData,
-                    results: {},
-                  };
-
-                  enqueue(workflowContext); // Enqueue for execution
-
-                  // Store a log entry for the processed email
-                  await prisma.log.create({
-                    data: {
-                      workflowId: trigger.workflowId,
-                      triggerId: trigger.id,
-                      status: 'ENQUEUED', // Initial status when added to queue
-                      message: messageId || `Email UID: ${msg.uid}`,
-                      context: emailData,
-                      source: 'NAVER_IMAP',
-                      executionId: executionId,
-                    },
-                  });
-                  // Mark email as seen (optional, depending on requirements)
-                  imap.addFlags(msg.uid, ['Seen'], (err) => {
-                    if (err) console.error(`Error marking email ${msg.uid} as seen:`, err);
-                  });
+                stream.once('end', () => {
+                  headers = Imap.parseHeader(buffer);
                 });
               });
+
               msg.once('attributes', (attrs) => {
-                // You can get UID from attrs.uid if needed
+                uid = attrs.uid;
               });
-              msg.once('end', () => {
-                //
+
+              msg.once('end', async () => {
+                if (!uid || !headers) return;
+
+                const messageId = headers['message-id'] ? headers['message-id'][0] : null;
+
+                // Find the associated workflow and trigger
+                // Simplified query to avoid complex JSON path issues
+                const triggers = await prisma.trigger.findMany({
+                  where: {
+                    type: 'IMAP_POLLING'
+                  },
+                  select: {
+                    id: true,
+                    workflowId: true,
+                    config: true
+                  }
+                });
+
+                // Filter in memory
+                const trigger = triggers.find(t => (t.config as any).accountId === accountId);
+
+                if (!trigger) {
+                  console.error(`No IMAP_POLLING trigger found for account ${accountId}. Skipping email processing.`);
+                  imap.addFlags(uid, ['Seen'], (err) => {
+                      if (err) console.error(`Error marking email ${uid} as seen:`, err);
+                    });
+                  return;
+                }
+
+                if (messageId) {
+                  const existingLog = await prisma.log.findFirst({
+                    where: { message: messageId, source: 'NAVER_IMAP' },
+                  });
+
+                  if (existingLog) {
+                    console.log(`Email with Message-ID ${messageId} already processed. Skipping.`);
+                    imap.addFlags(uid, ['Seen'], (err) => {
+                      if (err) console.error(`Error marking email ${uid} as seen:`, err);
+                    });
+                    return;
+                  }
+                }
+
+                const emailData = {
+                  messageId: messageId,
+                  uid: uid,
+                  receivedAt: headers.date ? new Date(headers.date[0]).toISOString() : new Date().toISOString(),
+                  source: 'NAVER_IMAP',
+                  accountId: accountId,
+                  subject: headers.subject ? headers.subject[0] : 'No Subject',
+                  from: headers.from ? headers.from[0] : 'Unknown',
+                };
+                console.log('Processed email:', emailData);
+
+                const executionId = uuidv4();
+                const workflowContext: WorkflowContext = {
+                  triggerId: trigger.id,
+                  workflowId: trigger.workflowId,
+                  executionId: executionId,
+                  data: emailData,
+                  results: {},
+                };
+
+                enqueue(workflowContext); // Enqueue for execution
+
+                // Store a log entry for the processed email
+                await prisma.log.create({
+                  data: {
+                    workflowId: trigger.workflowId,
+                    triggerId: trigger.id,
+                    status: 'ENQUEUED', // Initial status when added to queue
+                    message: messageId || `Email UID: ${uid}`,
+                    context: emailData,
+                    source: 'NAVER_IMAP',
+                    executionId: executionId,
+                  },
+                });
+                // Mark email as seen (optional, depending on requirements)
+                imap.addFlags(uid, ['Seen'], (err) => {
+                  if (err) console.error(`Error marking email ${uid} as seen:`, err);
+                });
               });
             });
 

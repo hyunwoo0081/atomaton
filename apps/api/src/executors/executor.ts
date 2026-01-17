@@ -1,7 +1,6 @@
 // apps/api/src/executors/executor.ts
 import { WorkflowContext } from './types';
-import prisma from '@atomaton/db';
-import { Action, Trigger, LogStatus } from '@atomaton/db/generated/prisma';
+import prisma, { Action, Trigger, LogStatus } from '@atomaton/db';
 import axios from 'axios';
 
 // --- Templating Utility ---

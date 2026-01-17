@@ -49,14 +49,11 @@
 
 ### 2. Environment Variables
 
-`.env` 파일을 생성하고 아래 내용을 설정합니다.
+/apps/api/ 경로에 `.env` 파일을 생성하고 아래 내용을 설정합니다.
 
 ```env
-PORT=3000
-DB_HOST=localhost
-DB_USER=your_user
-DB_PASSWORD=your_password
-DB_NAME=atomation
+PORT=3006
+DATABASE_URL="mysql://myuser:mypassword@localhost:3306/atomatonDB"
 MASTER_KEY=your_super_secret_master_key # 32자 이상의 랜덤 문자열
 
 ```
