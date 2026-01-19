@@ -4,11 +4,12 @@ import authRouter from './routes/auth';
 import workflowRouter from './routes/workflow';
 import accountRouter from './routes/account';
 import webhookRouter from './routes/webhook';
-import adminRouter from './routes/admin'; // Import admin router
+import adminRouter from './routes/admin';
+import logRouter from './routes/log'; // Import log router
 import { authenticateToken } from './middleware/auth';
 import { setProcessor } from './executors/queue';
 import { executeWorkflow } from './executors/executor';
-import { cleanupOldLogs } from './services/logCleanup'; // Import cleanup service
+import { cleanupOldLogs } from './services/logCleanup';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -23,7 +24,8 @@ app.use('/auth', authRouter);
 app.use('/workflows', workflowRouter);
 app.use('/accounts', accountRouter);
 app.use('/webhook', webhookRouter);
-app.use('/admin', adminRouter); // Register admin router
+app.use('/admin', adminRouter);
+app.use('/logs', logRouter); // Register log router
 
 app.get('/protected', authenticateToken, (req: Request, res: Response) => {
   res.json({ message: `Welcome ${req.userId}! You are ${req.isDeveloper ? 'a developer' : 'a regular user'}.` });

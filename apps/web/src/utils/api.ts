@@ -4,6 +4,9 @@ interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;
 }
 
+// Flag to prevent multiple logout events/alerts
+let isLoggingOut = false;
+
 export const api = {
   get: async <T>(url: string, options: RequestOptions = {}): Promise<T> => {
     return request<T>(url, { ...options, method: 'GET' });
@@ -48,6 +51,16 @@ async function request<T>(url: string, options: RequestOptions): Promise<T> {
   });
 
   if (!response.ok) {
+    if ((response.status === 401 || response.status === 403) && !isLoggingOut) {
+      isLoggingOut = true;
+      window.dispatchEvent(new CustomEvent('auth:logout'));
+      
+      // Reset flag after a while to allow future alerts if user logs in again
+      setTimeout(() => {
+        isLoggingOut = false;
+      }, 5000);
+    }
+
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
   }

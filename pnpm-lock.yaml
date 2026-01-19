@@ -84,6 +84,9 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.1.18
         version: 4.1.18(vite@7.3.0)
+      '@tanstack/react-query':
+        specifier: ^5.24.1
+        version: 5.90.19(react@19.2.3)
       react:
         specifier: ^19.2.3
         version: 19.2.3
@@ -148,7 +151,7 @@ importers:
   packages/db:
     dependencies:
       '@prisma/client':
-        specifier: ^5.10.2
+        specifier: ^5.22.0
         version: 5.22.0(prisma@5.22.0)
     devDependencies:
       '@types/bcryptjs':
@@ -161,13 +164,13 @@ importers:
         specifier: ^2.4.3
         version: 2.4.3
       prisma:
-        specifier: ^5.10.2
+        specifier: ^5.22.0
         version: 5.22.0
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@25.0.9)(typescript@5.9.3)
       typescript:
-        specifier: ^5.3.3
+        specifier: ^5.9.3
         version: 5.9.3
 
   packages/ui:
@@ -1429,6 +1432,19 @@ packages:
       '@tailwindcss/oxide': 4.1.18
       tailwindcss: 4.1.18
       vite: 7.3.0(@types/node@25.0.3)
+    dev: false
+
+  /@tanstack/query-core@5.90.19:
+    resolution: {integrity: sha512-GLW5sjPVIvH491VV1ufddnfldyVB+teCnpPIvweEfkpRx7CfUmUGhoh9cdcUKBh/KwVxk22aNEDxeTsvmyB/WA==}
+    dev: false
+
+  /@tanstack/react-query@5.90.19(react@19.2.3):
+    resolution: {integrity: sha512-qTZRZ4QyTzQc+M0IzrbKHxSeISUmRB3RPGmao5bT+sI6ayxSRhn0FXEnT5Hg3as8SBFcRosrXXRFB+yAcxVxJQ==}
+    peerDependencies:
+      react: ^18 || ^19
+    dependencies:
+      '@tanstack/query-core': 5.90.19
+      react: 19.2.3
     dev: false
 
   /@tsconfig/node10@1.0.12:

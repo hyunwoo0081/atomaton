@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Card } from '@atomaton/ui';
 import { api } from '../utils/api';
 import { LogTable } from '../components/LogTable';
+import { useQuery } from '@tanstack/react-query';
 
 interface Workflow {
   id: string;
@@ -22,28 +23,18 @@ interface Log {
 }
 
 export const Dashboard: React.FC = () => {
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [logs, setLogs] = useState<Log[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: workflows = [], isLoading: isLoadingWorkflows } = useQuery({
+    queryKey: ['workflows'],
+    queryFn: () => api.get<Workflow[]>('/workflows'),
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const { data: logsData, isLoading: isLoadingLogs } = useQuery({
+    queryKey: ['logs'],
+    queryFn: () => api.get<{ logs: Log[] }>('/logs?limit=10'),
+  });
 
-  const fetchData = async () => {
-    try {
-      const [workflowsData, logsResponse] = await Promise.all([
-        api.get<Workflow[]>('/workflows'),
-        api.get<{ logs: Log[] }>('/logs?limit=10'),
-      ]);
-      setWorkflows(workflowsData);
-      setLogs(logsResponse.logs);
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const logs = logsData?.logs || [];
+  const isLoading = isLoadingWorkflows || isLoadingLogs;
 
   const createWorkflow = async () => {
     const name = prompt('Enter workflow name:');
@@ -51,19 +42,22 @@ export const Dashboard: React.FC = () => {
 
     try {
       await api.post('/workflows', { name });
-      fetchData(); // Refresh data
+      // Invalidate queries to refresh data
+      // queryClient.invalidateQueries({ queryKey: ['workflows'] });
+      // For simplicity, we can just reload or let React Query handle it on next focus/mount if configured
+      window.location.reload(); 
     } catch (error) {
       console.error('Failed to create workflow:', error);
       alert('Failed to create workflow');
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return <div className="p-8">Loading...</div>;
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-12">
+    <div className="space-y-12">
       <section>
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Workflows</h1>

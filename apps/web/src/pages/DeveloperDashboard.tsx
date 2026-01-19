@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Card } from '@atomaton/ui';
 import { api } from '../utils/api';
+import { useQuery } from '@tanstack/react-query';
 
 interface SystemStats {
   overview: {
@@ -17,29 +18,16 @@ interface SystemStats {
 }
 
 export const DeveloperDashboard: React.FC = () => {
-  const [stats, setStats] = useState<SystemStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: stats, isLoading, error } = useQuery({
+    queryKey: ['systemStats'],
+    queryFn: () => api.get<SystemStats>('/admin/stats'),
+  });
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      const data = await api.get<SystemStats>('/admin/stats');
-      setStats(data);
-    } catch (error) {
-      console.error('Failed to fetch system stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
+  if (isLoading) {
     return <div className="p-8">Loading stats...</div>;
   }
 
-  if (!stats) {
+  if (error || !stats) {
     return <div className="p-8">Failed to load stats.</div>;
   }
 

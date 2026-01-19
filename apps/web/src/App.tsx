@@ -1,13 +1,14 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { WorkflowEditor } from './pages/WorkflowEditor';
 import { DeveloperDashboard } from './pages/DeveloperDashboard';
+import { Layout } from './components/Layout';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = localStorage.getItem('token');
-  return token ? <>{children}</> : <Navigate to="/login" />;
+  return token ? <Layout>{children}</Layout> : <Navigate to="/login" />;
 };
 
 const DeveloperRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -22,12 +23,35 @@ const DeveloperRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/" />;
   }
 
-  return <>{children}</>;
+  return <Layout>{children}</Layout>;
+};
+
+// Component to handle global events like logout
+const AuthHandler: React.FC = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleLogout = () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('is_developer');
+      alert('Session expired. Please login again.');
+      navigate('/login');
+    };
+
+    window.addEventListener('auth:logout', handleLogout);
+
+    return () => {
+      window.removeEventListener('auth:logout', handleLogout);
+    };
+  }, [navigate]);
+
+  return null;
 };
 
 function App() {
   return (
     <Router>
+      <AuthHandler />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route

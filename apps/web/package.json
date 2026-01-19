@@ -14,6 +14,7 @@
     "@atomaton/ui": "workspace:*",
     "@tailwindcss/cli": "^4.1.18",
     "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/react-query": "^5.24.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-router-dom": "^6.22.0",

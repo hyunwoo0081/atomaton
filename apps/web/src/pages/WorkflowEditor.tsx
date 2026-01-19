@@ -14,6 +14,7 @@ import 'reactflow/dist/style.css';
 import { api } from '../utils/api';
 import { Button } from '@atomaton/ui';
 import { ConfigPanel } from '../components/ConfigPanel';
+import { useQuery } from '@tanstack/react-query';
 
 interface WorkflowData {
   id: string;
@@ -29,24 +30,19 @@ export const WorkflowEditor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [workflow, setWorkflow] = useState<WorkflowData | null>(null);
   const [selectedNode, setSelectedNode] = useState<{ id: string; type: string; config: any } | null>(null);
 
-  useEffect(() => {
-    if (id) {
-      fetchWorkflow(id);
-    }
-  }, [id]);
+  const { data: workflow, isLoading } = useQuery({
+    queryKey: ['workflow', id],
+    queryFn: () => api.get<WorkflowData>(`/workflows/${id}`),
+    enabled: !!id,
+  });
 
-  const fetchWorkflow = async (workflowId: string) => {
-    try {
-      const data = await api.get<WorkflowData>(`/workflows/${workflowId}`);
-      setWorkflow(data);
-      layoutWorkflow(data);
-    } catch (error) {
-      console.error('Failed to fetch workflow:', error);
+  useEffect(() => {
+    if (workflow) {
+      layoutWorkflow(workflow);
     }
-  };
+  }, [workflow]);
 
   const layoutWorkflow = (data: WorkflowData) => {
     const newNodes: Node[] = [];
@@ -135,7 +131,7 @@ export const WorkflowEditor: React.FC = () => {
     alert('Config saved (mock)');
   };
 
-  if (!workflow) return <div>Loading...</div>;
+  if (isLoading || !workflow) return <div>Loading...</div>;
 
   return (
     <div className="h-screen flex flex-col relative">
