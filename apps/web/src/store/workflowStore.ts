@@ -88,15 +88,15 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   onConnect: (connection: Connection) => {
     let label = '';
-    let stroke = '#b1b1b7';
+    let stroke = '#8A3FFC'; // Default Neon Purple
 
     // Add label for Condition Node
     if (connection.sourceHandle === 'true') {
       label = 'Yes';
-      stroke = '#22c55e'; // Green
+      stroke = '#00F5A0'; // Green
     } else if (connection.sourceHandle === 'false') {
       label = 'No';
-      stroke = '#ef4444'; // Red
+      stroke = '#FF2E63'; // Red
     }
 
     const newEdge = {
@@ -106,6 +106,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       label,
       style: { stroke, strokeWidth: 2 },
       markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
+      labelStyle: { fill: '#FFFFFF', fontWeight: 700 }, // White label text
+      labelBgStyle: { fill: '#0D0E12', fillOpacity: 0.7 }, // Dark label background
     };
 
     set({

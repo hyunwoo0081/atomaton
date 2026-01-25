@@ -8,8 +8,19 @@ interface CardProps {
 
 export const Card: React.FC<CardProps> = ({ children, className = '', title }) => {
   return (
-    <div className={`bg-white shadow rounded-lg p-6 ${className}`}>
-      {title && <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">{title}</h3>}
+    <div 
+      className={`
+        bg-[rgba(255,255,255,0.05)] 
+        border border-white/10 
+        backdrop-blur-xl 
+        shadow-2xl 
+        rounded-[32px] 
+        p-6 
+        text-white
+        ${className}
+      `}
+    >
+      {title && <h3 className="text-xl font-bold leading-6 text-white mb-4">{title}</h3>}
       {children}
     </div>
   );

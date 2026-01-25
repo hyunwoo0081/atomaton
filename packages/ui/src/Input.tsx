@@ -6,10 +6,24 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 
 export const Input: React.FC<InputProps> = ({ label, className = '', ...props }) => {
   return (
-    <div className="flex flex-col mb-4">
-      {label && <label className="mb-1 text-sm font-medium text-gray-700">{label}</label>}
+    <div className="flex flex-col mb-4 w-full">
+      {label && <label className="mb-2 text-sm font-medium text-white/80">{label}</label>}
       <input
-        className={`px-3 py-2 border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900 ${className}`}
+        className={`
+          px-4 py-3 
+          bg-white/5 
+          border border-white/10 
+          rounded-xl 
+          text-white 
+          placeholder-white/30 
+          focus:outline-none 
+          focus:ring-2 
+          focus:ring-[#8A3FFC] 
+          focus:border-transparent 
+          transition-all 
+          duration-200
+          ${className}
+        `}
         {...props}
       />
     </div>

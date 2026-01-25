@@ -42,9 +42,6 @@ export const Dashboard: React.FC = () => {
 
     try {
       await api.post('/workflows', { name });
-      // Invalidate queries to refresh data
-      // queryClient.invalidateQueries({ queryKey: ['workflows'] });
-      // For simplicity, we can just reload or let React Query handle it on next focus/mount if configured
       window.location.reload(); 
     } catch (error) {
       console.error('Failed to create workflow:', error);
@@ -53,33 +50,35 @@ export const Dashboard: React.FC = () => {
   };
 
   if (isLoading) {
-    return <div className="p-8">Loading...</div>;
+    return <div className="p-8 text-white">Loading...</div>;
   }
 
   return (
     <div className="space-y-12">
       <section>
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Workflows</h1>
+          <h1 className="text-3xl font-bold text-white">Workflows</h1>
           <Button onClick={createWorkflow}>+ New Workflow</Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {workflows.map((workflow) => (
-            <Link key={workflow.id} to={`/workflow/${workflow.id}`} className="block">
-              <Card className="hover:shadow-lg transition-shadow duration-200 h-full">
+            <Link key={workflow.id} to={`/workflow/${workflow.id}`} className="block group">
+              <Card className="h-full transition-all duration-300 group-hover:scale-[1.02] group-hover:shadow-[0_0_30px_rgba(138,63,252,0.2)]">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{workflow.name}</h3>
+                    <h3 className="text-xl font-bold text-white mb-2">{workflow.name}</h3>
                     <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        workflow.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                        workflow.is_active 
+                          ? 'bg-[#00F5A0]/20 text-[#00F5A0] border-[#00F5A0]/30' 
+                          : 'bg-white/10 text-white/50 border-white/20'
                       }`}
                     >
                       {workflow.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-white/40 font-mono">
                     {new Date(workflow.created_at).toLocaleDateString()}
                   </span>
                 </div>
@@ -88,7 +87,7 @@ export const Dashboard: React.FC = () => {
           ))}
           
           {workflows.length === 0 && (
-            <div className="col-span-full text-center py-12 text-gray-500">
+            <div className="col-span-full text-center py-12 text-white/50 border border-dashed border-white/10 rounded-3xl">
               No workflows found. Create your first one!
             </div>
           )}
@@ -96,7 +95,7 @@ export const Dashboard: React.FC = () => {
       </section>
 
       <section>
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Recent Activity</h2>
+        <h2 className="text-2xl font-bold text-white mb-6">Recent Activity</h2>
         <LogTable logs={logs} />
       </section>
     </div>

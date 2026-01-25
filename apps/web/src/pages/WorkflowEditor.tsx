@@ -203,16 +203,17 @@ const WorkflowEditorContent: React.FC = () => {
           nodeTypes={nodeTypes}
           isValidConnection={isValidConnection}
           fitView
+          style={{ background: 'transparent' }} // Transparent background
         >
-          <Background />
-          <Controls />
+          <Background color="#ffffff" gap={16} size={1} style={{ opacity: 0.1 }} />
+          <Controls className="bg-white/10 backdrop-blur-md border border-white/10 rounded-lg overflow-hidden" />
         </ReactFlow>
         
         {nodes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200 text-center pointer-events-auto">
-              <h3 className="text-lg font-bold mb-2">Start your workflow</h3>
-              <p className="text-gray-500 mb-4">Drag a trigger from the sidebar or click below.</p>
+            <div className="bg-white/5 backdrop-blur-xl p-8 rounded-3xl border border-white/10 text-center pointer-events-auto shadow-2xl">
+              <h3 className="text-xl font-bold mb-2 text-white">Start your workflow</h3>
+              <p className="text-white/50 mb-6">Drag a trigger from the sidebar or click below.</p>
               <Button onClick={() => addNode('trigger', { x: 250, y: 250 })}>
                 Add Trigger
               </Button>
