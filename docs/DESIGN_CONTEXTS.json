@@ -1,0 +1,73 @@
+{
+  "design_system_identity": {
+    "theme_name": "Luminous Glassmorphism SaaS",
+    "core_concept": "심도 있는 레이어와 네온 그라데이션을 통한 몰입형 사용자 경험",
+    "color_palette": {
+      "background": {
+        "main": "#0D0E12",
+        "surface": "rgba(255, 255, 255, 0.05)",
+        "overlay": "rgba(13, 14, 18, 0.7)"
+      },
+      "accents": {
+        "primary_purple": "#8A3FFC",
+        "vibrant_pink": "#E02DFF",
+        "gradient_flow": "linear-gradient(135deg, #8A3FFC 0%, #E02DFF 100%)",
+        "glow": "rgba(138, 63, 252, 0.4)"
+      },
+      "status": {
+        "success": "#00F5A0",
+        "error": "#FF2E63"
+      }
+    },
+    "principles": [
+      {
+        "category": "Visual Depth & Layering",
+        "principle": "다층적 글래스모피즘 (Multi-layered Glassmorphism)",
+        "implementation_detail": {
+          "backdrop_filter": "blur(20px) saturate(150%)",
+          "border": "1px solid rgba(255, 255, 255, 0.1)",
+          "box_shadow": "0 8px 32px 0 rgba(0, 0, 0, 0.8)",
+          "context": "이미지의 'Michal Malewicz' 카드처럼 배경의 구체(Sphere)가 비치면서도 콘텐츠의 가독성을 유지해야 함"
+        }
+      },
+      {
+        "category": "Lighting & Atmosphere",
+        "principle": "후방 발광 포인트 (Back-lit Atmosphere)",
+        "implementation_detail": {
+          "element": "Floating Spheres",
+          "styles": "보라색(#8A3FFC)과 핑크색(#E02DFF)의 구체를 카드 뒤편에 배치하여 입체감 형성",
+          "opacity": "0.4 ~ 0.7 사이의 불투명도로 몽환적인 분위기 연출"
+        }
+      },
+      {
+        "category": "Typography & Information",
+        "principle": "하이 콘트라스트 정보 위계 (High-Contrast Hierarchy)",
+        "implementation_detail": {
+          "title": "Bold Sans-serif, White (#FFFFFF), Font-size: 20px+",
+          "subtitle": "Italic Serif or Script, Light Purple/Pink, Font-size: 14px",
+          "data_points": "숫자 데이터를 강조(Bold)하고 하단에 흐린 텍스트로 라벨 배치 (예: 251 Uploaded designs)"
+        }
+      },
+      {
+        "category": "Interactive Components",
+        "principle": "네온 그라데이션 액션 버튼 (Neon Gradient Call-to-Action)",
+        "implementation_detail": {
+          "background": "linear-gradient(90deg, #8A3FFC, #2D5BFF)",
+          "hover_effect": "Box-shadow를 통한 강한 Glow 효과 추가",
+          "border_radius": "24px (Pill-shape)로 부드러운 인상 제공"
+        }
+      }
+    ],
+    "ui_components_specs": {
+      "cards": {
+        "border_radius": "32px",
+        "padding": "24px",
+        "spacing": "16px between elements"
+      },
+      "avatar": {
+        "style": "Circular with Gradient Border",
+        "size": "large (80px x 80px)"
+      }
+    }
+  }
+}

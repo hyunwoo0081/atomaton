@@ -6,9 +6,9 @@ import { WorkflowEditor } from './pages/WorkflowEditor';
 import { DeveloperDashboard } from './pages/DeveloperDashboard';
 import { Layout } from './components/Layout';
 
-const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const PrivateRoute: React.FC<{ children: React.ReactNode; fullWidth?: boolean }> = ({ children, fullWidth }) => {
   const token = localStorage.getItem('token');
-  return token ? <Layout>{children}</Layout> : <Navigate to="/login" />;
+  return token ? <Layout fullWidth={fullWidth}>{children}</Layout> : <Navigate to="/login" />;
 };
 
 const DeveloperRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -65,7 +65,7 @@ function App() {
         <Route
           path="/workflow/:id"
           element={
-            <PrivateRoute>
+            <PrivateRoute fullWidth>
               <WorkflowEditor />
             </PrivateRoute>
           }

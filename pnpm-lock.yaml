@@ -102,6 +102,12 @@ importers:
       tailwindcss:
         specifier: ^4.1.18
         version: 4.1.18
+      uuid:
+        specifier: ^13.0.0
+        version: 13.0.0
+      zustand:
+        specifier: ^4.5.2
+        version: 4.5.7(@types/react@19.2.7)(react@19.2.3)
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.2

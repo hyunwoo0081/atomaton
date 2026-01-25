@@ -4,9 +4,10 @@ import { Button } from '@atomaton/ui';
 
 interface LayoutProps {
   children: React.ReactNode;
+  fullWidth?: boolean;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, fullWidth = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const isDeveloper = localStorage.getItem('is_developer') === 'true';
@@ -18,8 +19,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+      <nav className="bg-white shadow-sm flex-shrink-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">
@@ -62,8 +63,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
       </nav>
 
-      <main className="py-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">{children}</div>
+      <main className={`flex-1 overflow-auto ${fullWidth ? '' : 'py-10'}`}>
+        <div className={`${fullWidth ? 'h-full' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}`}>
+          {children}
+        </div>
       </main>
     </div>
   );
