@@ -191,9 +191,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       const config = node.data.config || {};
       switch (node.type) {
         case 'trigger':
+        case 'trigger-webhook':
           return !!config.accountId;
         case 'action':
           return !!config.webhookUrl && !!config.content;
+        case 'action-notion':
+          return !!config.databaseId;
         case 'condition':
           return config.conditions?.every((c: any) => c.value);
         default:

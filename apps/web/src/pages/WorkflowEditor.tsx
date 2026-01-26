@@ -12,7 +12,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { api } from '../utils/api';
 import { ConfigPanel } from '../components/ConfigPanel';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWorkflowStore } from '../store/workflowStore';
 import { TriggerNode } from '../components/nodes/TriggerNode';
 import { ActionNode } from '../components/nodes/ActionNode';
@@ -27,6 +27,8 @@ interface WorkflowData {
   name: string;
   trigger?: any;
   actions: any[];
+  ui_config?: { nodes: any[]; edges: any[] };
+  settings?: any;
 }
 
 const WorkflowEditorContent: React.FC = () => {
@@ -34,6 +36,7 @@ const WorkflowEditorContent: React.FC = () => {
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const reactFlowInstance = useReactFlow();
+  const queryClient = useQueryClient();
   
   const {
     nodes,
@@ -49,10 +52,14 @@ const WorkflowEditorContent: React.FC = () => {
     selectedNodeId,
     setSelectedNodeId,
     updateNodeData,
+    isValid,
+    validateWorkflow,
     isModalOpen,
     modalPosition,
     closeModal,
     addNode,
+    globalSettings,
+    updateGlobalSettings,
   } = useWorkflowStore();
 
   const nodeTypes: NodeTypes = useMemo(() => ({
@@ -71,61 +78,24 @@ const WorkflowEditorContent: React.FC = () => {
 
   useEffect(() => {
     if (workflow) {
-      layoutWorkflow(workflow);
-    }
-  }, [workflow]);
-
-  const layoutWorkflow = (data: WorkflowData) => {
-    const newNodes: any[] = [];
-    const newEdges: any[] = [];
-    let yPos = 50;
-    const xPos = 250;
-
-    // Trigger Node
-    if (data.trigger) {
-      let triggerType = 'trigger';
-      if (data.trigger.type === 'WEBHOOK') triggerType = 'trigger-webhook';
-
-      newNodes.push({
-        id: 'trigger',
-        type: triggerType,
-        data: { label: `Trigger: ${data.trigger.type}`, config: data.trigger.config, originalData: data.trigger, isValid: true },
-        position: { x: xPos, y: yPos },
-      });
-      yPos += 150;
-    }
-
-    // Action Nodes
-    let previousNodeId = data.trigger ? 'trigger' : null;
-    
-    data.actions.forEach((action) => {
-      const nodeId = `action-${action.id}`;
-      let actionType = 'action';
-      
-      if (action.type === 'NOTION_PAGE') actionType = 'action-notion';
-
-      newNodes.push({
-        id: nodeId,
-        type: actionType,
-        data: { label: `Action: ${action.type}`, config: action.config, originalData: action, isValid: true },
-        position: { x: xPos, y: yPos },
-      });
-
-      if (previousNodeId) {
-        newEdges.push({
-          id: `e-${previousNodeId}-${nodeId}`,
-          source: previousNodeId,
-          target: nodeId,
-        });
+      // Load ui_config and settings from fetched workflow
+      if (workflow.ui_config) {
+        setNodes(workflow.ui_config.nodes);
+        setEdges(workflow.ui_config.edges);
+      } else {
+        setNodes([]);
+        setEdges([]);
       }
+      if (workflow.settings) {
+        updateGlobalSettings(workflow.settings);
+      }
+    }
+  }, [workflow, setNodes, setEdges, updateGlobalSettings]);
 
-      previousNodeId = nodeId;
-      yPos += 150;
-    });
-
-    setNodes(newNodes);
-    setEdges(newEdges);
-  };
+  // Validate on mount and changes
+  useEffect(() => {
+    validateWorkflow();
+  }, [nodes, validateWorkflow]);
 
   const onNodeClick: NodeMouseHandler = useCallback((event, node) => {
     setSelectedNodeId(node.id);
@@ -152,27 +122,38 @@ const WorkflowEditorContent: React.FC = () => {
     }
   };
 
+  const saveWorkflowMutation = useMutation({
+    mutationFn: (data: { nodes: any[]; edges: any[]; globalSettings: any }) => {
+      return api.put(`/workflows/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflow', id] });
+      alert('Workflow saved successfully!');
+    },
+    onError: (error: any) => {
+      console.error('Failed to save workflow:', error);
+      alert(`Failed to save workflow: ${error.message}`);
+    },
+  });
+
   const handleSaveWorkflow = async () => {
     if (!id) return;
-    try {
-      console.log('Saving workflow:', { nodes, edges });
-      alert('Workflow saved successfully!');
-    } catch (error) {
-      console.error('Failed to save workflow:', error);
-      alert('Failed to save workflow');
-    }
+    saveWorkflowMutation.mutate({ nodes, edges, globalSettings });
   };
 
   const handleRunTest = async (inputData: any) => {
-    console.log('Running test with:', inputData);
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          status: 'SUCCESS',
-          logs: ['Triggered by test event', 'Action executed: Discord Webhook'],
-        });
-      }, 1000);
-    });
+    if (!id) throw new Error('Workflow ID is missing for test run.');
+    try {
+      const response = await api.post(`/workflows/${id}/test`, {
+        nodes,
+        edges,
+        inputData,
+      });
+      return response;
+    } catch (error: any) {
+      console.error('Test run failed:', error);
+      throw new Error(error.message || 'Test run failed');
+    }
   };
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -203,7 +184,7 @@ const WorkflowEditorContent: React.FC = () => {
           nodeTypes={nodeTypes}
           isValidConnection={isValidConnection}
           fitView
-          style={{ background: 'transparent' }} // Transparent background
+          style={{ background: 'transparent' }}
         >
           <Background color="#ffffff" gap={16} size={1} style={{ opacity: 0.1 }} />
           <Controls className="bg-white/10 backdrop-blur-md border border-white/10 rounded-lg overflow-hidden" />

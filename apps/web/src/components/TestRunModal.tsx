@@ -24,7 +24,7 @@ export const TestRunModal: React.FC<TestRunModalProps> = ({ isOpen, onClose, onR
     try {
       const parsedData = JSON.parse(inputData);
       const res = await onRun(parsedData);
-      setResult(res);
+      setResult(res.data || res); // Handle axios response or direct data
     } catch (error: any) {
       setResult({ error: error.message || 'Invalid JSON or Execution Failed' });
     } finally {
@@ -33,34 +33,34 @@ export const TestRunModal: React.FC<TestRunModalProps> = ({ isOpen, onClose, onR
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl w-[600px] max-h-[80vh] flex flex-col">
-        <div className="p-4 border-b flex justify-between items-center">
-          <h3 className="text-lg font-bold">Test Workflow</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">✕</button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-[#0D0E12]/90 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl w-[600px] max-h-[80vh] flex flex-col">
+        <div className="p-6 border-b border-white/10 flex justify-between items-center">
+          <h3 className="text-xl font-bold text-white">Test Workflow</h3>
+          <button onClick={onClose} className="text-white/50 hover:text-white transition-colors">✕</button>
         </div>
         
-        <div className="p-4 flex-1 overflow-y-auto">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Input Data (Trigger Payload)</label>
+        <div className="p-6 flex-1 overflow-y-auto">
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-white/80 mb-2">Input Data (Trigger Payload)</label>
             <textarea
-              className="w-full h-40 p-2 border rounded font-mono text-sm"
+              className="w-full h-40 p-4 bg-white/5 border border-white/10 rounded-xl font-mono text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#8A3FFC] transition-all"
               value={inputData}
               onChange={(e) => setInputData(e.target.value)}
             />
           </div>
 
           {result && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Execution Result</label>
-              <div className={`p-3 rounded border text-sm font-mono whitespace-pre-wrap ${result.error ? 'bg-red-50 border-red-200 text-red-700' : 'bg-green-50 border-green-200 text-green-700'}`}>
+            <div className="mb-4 animate-fade-in">
+              <label className="block text-sm font-medium text-white/80 mb-2">Execution Result</label>
+              <div className={`p-4 rounded-xl border text-sm font-mono whitespace-pre-wrap overflow-auto max-h-60 ${result.error ? 'bg-[#FF2E63]/10 border-[#FF2E63]/30 text-[#FF2E63]' : 'bg-[#00F5A0]/10 border-[#00F5A0]/30 text-[#00F5A0]'}`}>
                 {JSON.stringify(result, null, 2)}
               </div>
             </div>
           )}
         </div>
 
-        <div className="p-4 border-t flex justify-end space-x-2">
+        <div className="p-6 border-t border-white/10 flex justify-end space-x-3">
           <Button variant="secondary" onClick={onClose}>Close</Button>
           <Button onClick={handleRun} disabled={isRunning}>
             {isRunning ? 'Running...' : 'Run Test'}

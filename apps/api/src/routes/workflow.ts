@@ -5,6 +5,7 @@ import {
   getWorkflowById,
   updateWorkflow,
   deleteWorkflow,
+  testWorkflow,
 } from '../controllers/workflow';
 import { authenticateToken } from '../middleware/auth';
 
@@ -17,5 +18,6 @@ router.get('/', getWorkflows);
 router.get('/:id', getWorkflowById);
 router.put('/:id', updateWorkflow);
 router.delete('/:id', deleteWorkflow);
+router.post('/:id/test', testWorkflow); // Add test route
 
 export default router;

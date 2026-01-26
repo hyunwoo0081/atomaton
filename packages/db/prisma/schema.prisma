@@ -41,6 +41,8 @@ model Workflow {
   trigger    Trigger?
   actions    Action[]
   logs       Log[]
+  ui_config  Json?     // React Flow nodes & edges
+  settings   Json?     // Global settings (failure alert, etc.)
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
 }
@@ -72,7 +74,7 @@ model Action {
   id          String   @id @default(cuid())
   workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   workflowId  String
-  type        String // "DISCORD_WEBHOOK", "NOTION_PAGE"
+  type        String // "DISCORD_WEBHOOK", "NOTION_PAGE", "CONDITION"
   config      Json
   order       Int // For sequential execution
   created_at  DateTime @default(now())
