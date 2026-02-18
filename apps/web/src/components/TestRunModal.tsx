@@ -1,10 +1,17 @@
 import React, { useState } from 'react';
 import { Button } from '@atomaton/ui';
 
+interface TestResult {
+  status?: string;
+  logs?: any[];
+  error?: string;
+  [key: string]: any;
+}
+
 interface TestRunModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onRun: (inputData: any) => Promise<any>;
+  onRun: (inputData: Record<string, any>) => Promise<TestResult>;
 }
 
 export const TestRunModal: React.FC<TestRunModalProps> = ({ isOpen, onClose, onRun }) => {
@@ -13,7 +20,7 @@ export const TestRunModal: React.FC<TestRunModalProps> = ({ isOpen, onClose, onR
     from: "test@example.com",
     body: "This is a test email body."
   }, null, 2));
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<TestResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
   if (!isOpen) return null;
@@ -24,9 +31,15 @@ export const TestRunModal: React.FC<TestRunModalProps> = ({ isOpen, onClose, onR
     try {
       const parsedData = JSON.parse(inputData);
       const res = await onRun(parsedData);
-      setResult(res.data || res); // Handle axios response or direct data
-    } catch (error: any) {
-      setResult({ error: error.message || 'Invalid JSON or Execution Failed' });
+      setResult(res);
+    } catch (error: unknown) {
+      let errorMessage = 'Execution Failed';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      setResult({ error: errorMessage });
     } finally {
       setIsRunning(false);
     }

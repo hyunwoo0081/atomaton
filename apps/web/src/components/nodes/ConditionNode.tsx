@@ -1,5 +1,5 @@
 import React from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, type NodeProps } from 'reactflow'
 import { BaseNode } from './BaseNode';
 
 export const ConditionNode: React.FC<NodeProps> = ({ id, data, selected }) => {

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import prisma from '@atomaton/db'; // Using the db package
+import prisma, { Prisma } from '@atomaton/db';
 
 // This should ideally come from environment variables
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretjwtkey';
@@ -26,9 +26,11 @@ export const register = async (req: Request, res: Response) => {
     });
 
     res.status(201).json({ message: 'User registered successfully', userId: user.id });
-  } catch (error: any) {
-    if (error.code === 'P2002') { // Unique constraint failed for email
-      return res.status(409).json({ message: 'Email already registered' });
+  } catch (error: unknown) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') { // Unique constraint failed for email
+        return res.status(409).json({ message: 'Email already registered' });
+      }
     }
     console.error('Registration error:', error);
     res.status(500).json({ message: 'Internal server error' });

@@ -1,6 +1,5 @@
 import React from 'react';
-import { Handle, Position } from 'reactflow';
-import { useWorkflowStore } from '../../store/workflowStore';
+import { useWorkflowStore } from '../../store/workflowStore'
 
 interface BaseNodeProps {
   id: string;

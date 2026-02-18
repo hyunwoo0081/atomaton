@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
-import prisma from '@atomaton/db';
+import prisma, { Prisma } from '@atomaton/db';
 import { executeWorkflow } from '../executors/executor';
 import { v4 as uuidv4 } from 'uuid';
+import { GlobalSettings, UIConfig } from '../executors/types';
 
 export const createWorkflow = async (req: Request, res: Response) => {
   const { name } = req.body;
@@ -19,8 +20,8 @@ export const createWorkflow = async (req: Request, res: Response) => {
       data: {
         name,
         userId,
-        ui_config: { nodes: [], edges: [] }, // Initialize empty UI config
-        settings: { enableFailureAlert: false, failureWebhookUrl: '' }, // Initialize default settings
+        ui_config: { nodes: [], edges: [] },
+        settings: { enableFailureAlert: false, failureWebhookUrl: '' },
       },
     });
     res.status(201).json(workflow);
@@ -88,9 +89,17 @@ export const getWorkflowById = async (req: Request, res: Response) => {
   }
 };
 
+interface UpdateWorkflowBody {
+  name?: string;
+  is_active?: boolean;
+  nodes?: any[]; // React Flow nodes
+  edges?: any[]; // React Flow edges
+  globalSettings?: GlobalSettings;
+}
+
 export const updateWorkflow = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, is_active, nodes, edges, globalSettings } = req.body;
+  const { name, is_active, nodes, edges, globalSettings } = req.body as UpdateWorkflowBody;
   const userId = req.userId;
 
   if (!userId) {
@@ -99,15 +108,13 @@ export const updateWorkflow = async (req: Request, res: Response) => {
 
   try {
     // 1. Update basic info and UI config
-    const updateData: any = {};
+    const updateData: Prisma.WorkflowUpdateInput = {};
     if (name) updateData.name = name;
     if (is_active !== undefined) updateData.is_active = is_active;
     if (nodes && edges) updateData.ui_config = { nodes, edges };
-    if (globalSettings) updateData.settings = globalSettings;
+    if (globalSettings) updateData.settings = globalSettings as any; // Prisma Json type workaround
 
     // 2. Parse nodes/edges to update Trigger and Actions
-    // This is a simplified logic: Delete all existing triggers/actions and recreate them
-    // In a real production app, you might want to update existing ones to preserve IDs/logs
     if (nodes && edges) {
       await prisma.$transaction(async (tx) => {
         // Delete existing
@@ -115,23 +122,19 @@ export const updateWorkflow = async (req: Request, res: Response) => {
         await tx.action.deleteMany({ where: { workflowId: id } });
 
         // Create Trigger
-        const triggerNode = nodes.find((n: any) => n.type.startsWith('trigger'));
+        const triggerNode = nodes.find((n) => n.type.startsWith('trigger'));
         if (triggerNode && triggerNode.data.config.accountId) {
           await tx.trigger.create({
             data: {
               workflowId: id,
               type: triggerNode.type === 'trigger-webhook' ? 'WEBHOOK' : 'IMAP_POLLING',
               config: triggerNode.data.config,
-              // Rules are stored in config for now, or can be mapped to Rule model
             }
           });
         }
 
-        // Create Actions (Topological sort or simple order based on edges)
-        // For MVP, we assume a simple linear or tree structure and just save them.
-        // The executor will handle the graph traversal using ui_config.
-        // However, we still save Actions for easier querying/debugging if needed.
-        const actionNodes = nodes.filter((n: any) => n.type.startsWith('action') || n.type === 'condition');
+        // Create Actions
+        const actionNodes = nodes.filter((n) => n.type.startsWith('action') || n.type === 'condition');
         
         for (let i = 0; i < actionNodes.length; i++) {
           const node = actionNodes[i];
@@ -143,8 +146,8 @@ export const updateWorkflow = async (req: Request, res: Response) => {
             data: {
               workflowId: id,
               type,
-              config: { ...node.data.config, nodeId: node.id }, // Store node ID for mapping
-              order: i, // Simple ordering, not strictly execution order
+              config: { ...node.data.config, nodeId: node.id },
+              order: i,
             }
           });
         }
@@ -204,28 +207,19 @@ export const testWorkflow = async (req: Request, res: Response) => {
   }
 
   try {
-    // We don't need to save the workflow to test it.
-    // We just need to pass the nodes/edges/inputData to the executor.
-    // However, executor expects a workflowId for logging.
-    // We can use the real workflow ID if it exists, or a dummy one.
-    // Since we are testing a specific workflow (id in params), we use that.
-
     const executionId = uuidv4();
     const context = {
       workflowId: id,
-      triggerId: 'test-trigger', // Dummy trigger ID
+      triggerId: 'test-trigger',
       executionId,
       data: inputData,
       results: {},
     };
 
-    // Execute with override data
-    // Note: executeWorkflow needs to be updated to accept override data
-    // We updated executor.ts in previous step to accept overrideWorkflowData
     const logs = await executeWorkflow(context, { nodes, edges });
 
     res.status(200).json({
-      status: 'SUCCESS', // Or determine from logs
+      status: 'SUCCESS',
       logs,
     });
 

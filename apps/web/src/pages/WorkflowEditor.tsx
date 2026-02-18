@@ -3,17 +3,19 @@ import { useParams } from 'react-router-dom';
 import ReactFlow, {
   Background,
   Controls,
-  NodeMouseHandler,
-  NodeTypes,
+  type NodeMouseHandler,
+  type NodeTypes,
   ReactFlowProvider,
   useReactFlow,
-  Connection,
+  type Connection,
+  type Node,
+  type Edge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { api } from '../utils/api';
 import { ConfigPanel } from '../components/ConfigPanel';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useWorkflowStore } from '../store/workflowStore';
+import { useWorkflowStore } from '../store/workflowStore'
 import { TriggerNode } from '../components/nodes/TriggerNode';
 import { ActionNode } from '../components/nodes/ActionNode';
 import { ConditionNode } from '../components/nodes/ConditionNode';
@@ -21,14 +23,13 @@ import { NodeSelectionModal } from '../components/NodeSelectionModal';
 import { TestRunModal } from '../components/TestRunModal';
 import { Sidebar } from '../components/Sidebar';
 import { Button } from '@atomaton/ui';
+import type { WorkflowBackendData, CustomNodeData, NodeConfig, GlobalSettings } from '../types/workflow';
 
-interface WorkflowData {
-  id: string;
-  name: string;
-  trigger?: any;
-  actions: any[];
-  ui_config?: { nodes: any[]; edges: any[] };
-  settings?: any;
+interface TestResult {
+  status?: string;
+  logs?: any[];
+  error?: string;
+  [key: string]: any;
 }
 
 const WorkflowEditorContent: React.FC = () => {
@@ -52,7 +53,6 @@ const WorkflowEditorContent: React.FC = () => {
     selectedNodeId,
     setSelectedNodeId,
     updateNodeData,
-    isValid,
     validateWorkflow,
     isModalOpen,
     modalPosition,
@@ -72,7 +72,7 @@ const WorkflowEditorContent: React.FC = () => {
 
   const { data: workflow, isLoading } = useQuery({
     queryKey: ['workflow', id],
-    queryFn: () => api.get<WorkflowData>(`/workflows/${id}`),
+    queryFn: () => api.get<WorkflowBackendData>(`/workflows/${id}`),
     enabled: !!id,
   });
 
@@ -97,9 +97,12 @@ const WorkflowEditorContent: React.FC = () => {
     validateWorkflow();
   }, [nodes, validateWorkflow]);
 
-  const onNodeClick: NodeMouseHandler = useCallback((event, node) => {
-    setSelectedNodeId(node.id);
-  }, [setSelectedNodeId]);
+  const onNodeClick: NodeMouseHandler = useCallback(
+    (_event, node) => {
+      setSelectedNodeId(node.id)
+    },
+    [setSelectedNodeId]
+  )
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
@@ -116,14 +119,14 @@ const WorkflowEditorContent: React.FC = () => {
     [edges]
   );
 
-  const handleConfigSave = (newConfig: any) => {
+  const handleConfigSave = (newConfig: NodeConfig) => {
     if (selectedNodeId) {
       updateNodeData(selectedNodeId, { config: newConfig });
     }
   };
 
   const saveWorkflowMutation = useMutation({
-    mutationFn: (data: { nodes: any[]; edges: any[]; globalSettings: any }) => {
+    mutationFn: (data: { nodes: Node<CustomNodeData>[]; edges: Edge[]; globalSettings: GlobalSettings }) => {
       return api.put(`/workflows/${id}`, data);
     },
     onSuccess: () => {
@@ -141,10 +144,10 @@ const WorkflowEditorContent: React.FC = () => {
     saveWorkflowMutation.mutate({ nodes, edges, globalSettings });
   };
 
-  const handleRunTest = async (inputData: any) => {
+  const handleRunTest = async (inputData: Record<string, any>): Promise<TestResult> => {
     if (!id) throw new Error('Workflow ID is missing for test run.');
     try {
-      const response = await api.post(`/workflows/${id}/test`, {
+      const response = await api.post<TestResult>(`/workflows/${id}/test`, {
         nodes,
         edges,
         inputData,
@@ -175,7 +178,7 @@ const WorkflowEditorContent: React.FC = () => {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onConnectEnd={onConnectEnd}
+          onConnectEnd={onConnectEnd as any} // Cast to any to bypass type mismatch
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           onNodesDelete={onNodesDelete}

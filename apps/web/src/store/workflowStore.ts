@@ -1,19 +1,21 @@
 import { create } from 'zustand';
 import {
-  type Connection,
-  type Edge,
-  type EdgeChange,
-  type Node,
-  type NodeChange,
   addEdge,
-  type OnNodesChange,
-  type OnEdgesChange,
-  type OnConnect,
-  applyNodeChanges,
   applyEdgeChanges,
+  applyNodeChanges,
   MarkerType,
-  type OnNodesDelete,
-} from 'reactflow'
+} from 'reactflow';
+import type {
+  Connection,
+  Edge,
+  EdgeChange,
+  Node,
+  NodeChange,
+  OnConnect,
+  OnEdgesChange,
+  OnNodesChange,
+  OnNodesDelete,
+} from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
 
 interface GlobalSettings {
@@ -27,7 +29,7 @@ interface WorkflowState {
   selectedNodeId: string | null;
   isDirty: boolean;
   isValid: boolean;
-  globalSettings: GlobalSettings; // Added globalSettings
+  globalSettings: GlobalSettings;
   
   // Modal State
   isModalOpen: boolean;
@@ -48,7 +50,7 @@ interface WorkflowState {
   setNodes: (nodes: Node[]) => void;
   setEdges: (edges: Edge[]) => void;
   validateWorkflow: () => void;
-  updateGlobalSettings: (settings: Partial<GlobalSettings>) => void; // Added updateGlobalSettings
+  updateGlobalSettings: (settings: Partial<GlobalSettings>) => void;
   
   // Modal Actions
   openModal: (position: { x: number; y: number }, sourceNodeId?: string, sourceHandleId?: string) => void;
@@ -118,8 +120,18 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   onConnectEnd: (event, connectionState) => {
     // Only open modal if dropped on pane (not on another node) AND it's a valid start
-    if (!connectionState.isValid && connectionState.fromNode) {
-      const { clientX, clientY } = event instanceof TouchEvent ? event.touches[0] : event;
+    if (connectionState && !connectionState.isValid && connectionState.fromNode) {
+      let clientX, clientY;
+      
+      // Handle both MouseEvent and TouchEvent
+      if (event.touches && event.touches.length > 0) {
+         clientX = event.touches[0].clientX;
+         clientY = event.touches[0].clientY;
+      } else {
+         clientX = (event as any).clientX;
+         clientY = (event as any).clientY;
+      }
+
       const sourceNodeId = connectionState.fromNode.id;
       const sourceHandleId = connectionState.fromHandle?.id;
 
@@ -191,12 +203,9 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       const config = node.data.config || {};
       switch (node.type) {
         case 'trigger':
-        case 'trigger-webhook':
           return !!config.accountId;
         case 'action':
           return !!config.webhookUrl && !!config.content;
-        case 'action-notion':
-          return !!config.databaseId;
         case 'condition':
           return config.conditions?.every((c: any) => c.value);
         default:

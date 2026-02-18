@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button, Input } from '@atomaton/ui';
 import { api } from '../utils/api';
 import { useQueryClient } from '@tanstack/react-query';
+import type { AccountPayloadConfig, NaverImapAccountConfig, NotionAccountConfig, AccountResponse } from '../types/workflow';
 
 interface AccountConnectionModalProps {
   isOpen: boolean;
@@ -9,9 +10,9 @@ interface AccountConnectionModalProps {
 }
 
 export const AccountConnectionModal: React.FC<AccountConnectionModalProps> = ({ isOpen, onClose }) => {
-  const [type, setType] = useState<'NAVER_IMAP' | 'NOTION'>('NAVER_IMAP');
+  const [type, setType] = useState<AccountResponse['type']>('NAVER_IMAP');
   const [name, setName] = useState('');
-  const [config, setConfig] = useState<any>({});
+  const [config, setConfig] = useState<AccountPayloadConfig>({} as AccountPayloadConfig);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
@@ -21,12 +22,22 @@ export const AccountConnectionModal: React.FC<AccountConnectionModalProps> = ({ 
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await api.post('/accounts', { type, config: { ...config, name } });
+      // Ensure config matches the selected type
+      let payloadConfig: AccountPayloadConfig;
+      if (type === 'NAVER_IMAP') {
+        payloadConfig = config as NaverImapAccountConfig;
+      } else if (type === 'NOTION') {
+        payloadConfig = config as NotionAccountConfig;
+      } else {
+        throw new Error('Unknown account type');
+      }
+
+      await api.post('/accounts', { type, name, config: payloadConfig });
       await queryClient.invalidateQueries({ queryKey: ['accounts'] });
       onClose();
       // Reset form
       setName('');
-      setConfig({});
+      setConfig({} as AccountPayloadConfig);
     } catch (error) {
       console.error('Failed to connect account:', error);
       alert('Failed to connect account');
@@ -35,8 +46,8 @@ export const AccountConnectionModal: React.FC<AccountConnectionModalProps> = ({ 
     }
   };
 
-  const handleConfigChange = (key: string, value: string) => {
-    setConfig((prev: any) => ({ ...prev, [key]: value }));
+  const handleConfigChange = (key: string, value: string | number) => {
+    setConfig((prev: AccountPayloadConfig) => ({ ...prev, [key]: value }));
   };
 
   return (
@@ -53,7 +64,7 @@ export const AccountConnectionModal: React.FC<AccountConnectionModalProps> = ({ 
             <select
               className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#8A3FFC] focus:border-transparent transition-all duration-200"
               value={type}
-              onChange={(e) => setType(e.target.value as any)}
+              onChange={(e) => setType(e.target.value as AccountResponse['type'])}
             >
               <option value="NAVER_IMAP" className="bg-[#0D0E12]">Naver Mail (IMAP)</option>
               <option value="NOTION" className="bg-[#0D0E12]">Notion</option>
@@ -74,7 +85,7 @@ export const AccountConnectionModal: React.FC<AccountConnectionModalProps> = ({ 
                 label="Email Address"
                 type="email"
                 placeholder="user@naver.com"
-                value={config.username || ''}
+                value={(config as NaverImapAccountConfig).username || ''}
                 onChange={(e) => handleConfigChange('username', e.target.value)}
                 required
               />
@@ -82,21 +93,21 @@ export const AccountConnectionModal: React.FC<AccountConnectionModalProps> = ({ 
                 label="Password"
                 type="password"
                 placeholder="Naver Password"
-                value={config.password || ''}
+                value={(config as NaverImapAccountConfig).password || ''}
                 onChange={(e) => handleConfigChange('password', e.target.value)}
                 required
               />
               <div className="grid grid-cols-2 gap-4">
                 <Input
                   label="IMAP Host"
-                  value={config.host || 'imap.naver.com'}
+                  value={(config as NaverImapAccountConfig).host || 'imap.naver.com'}
                   onChange={(e) => handleConfigChange('host', e.target.value)}
                 />
                 <Input
                   label="IMAP Port"
                   type="number"
-                  value={config.port || '993'}
-                  onChange={(e) => handleConfigChange('port', e.target.value)}
+                  value={(config as NaverImapAccountConfig).port || '993'}
+                  onChange={(e) => handleConfigChange('port', parseInt(e.target.value))}
                 />
               </div>
             </>
@@ -108,7 +119,7 @@ export const AccountConnectionModal: React.FC<AccountConnectionModalProps> = ({ 
                 label="Integration Token"
                 type="password"
                 placeholder="secret_..."
-                value={config.token || ''}
+                value={(config as NotionAccountConfig).token || ''}
                 onChange={(e) => handleConfigChange('token', e.target.value)}
                 required
               />

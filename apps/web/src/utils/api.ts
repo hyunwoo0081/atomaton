@@ -11,7 +11,7 @@ export const api = {
   get: async <T>(url: string, options: RequestOptions = {}): Promise<T> => {
     return request<T>(url, { ...options, method: 'GET' });
   },
-  post: async <T>(url: string, body: any, options: RequestOptions = {}): Promise<T> => {
+  post: async <T>(url: string, body: unknown, options: RequestOptions = {}): Promise<T> => {
     return request<T>(url, {
       ...options,
       method: 'POST',
@@ -22,7 +22,7 @@ export const api = {
       },
     });
   },
-  put: async <T>(url: string, body: any, options: RequestOptions = {}): Promise<T> => {
+  put: async <T>(url: string, body: unknown, options: RequestOptions = {}): Promise<T> => {
     return request<T>(url, {
       ...options,
       method: 'PUT',
