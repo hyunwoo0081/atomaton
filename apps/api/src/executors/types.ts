@@ -1,109 +1,115 @@
 // apps/api/src/executors/types.ts
-import { Prisma } from '@atomaton/db';
+import { Prisma } from '@atomaton/db'
 
 /**
- * Common data structure for any trigger or action output.
+ * Common data structure for each trigger or action output.
  * Uses 'unknown' to enforce strict type checking and narrowing.
  */
-export type WorkflowData = Record<string, unknown>;
+export type WorkflowData = Record<string, unknown>
 
 export interface WorkflowContext {
-  triggerId: string;
-  workflowId: string;
-  executionId: string;
-  data: WorkflowData;
-  results: Record<string, ActionResult>;
+  triggerId: string
+  workflowId: string
+  executionId: string
+  data: WorkflowData
+  results: Record<string, ActionResult>
 }
 
 export interface ActionResult {
-  success: boolean;
-  message: string;
-  data?: Record<string, unknown>;
-  extractedVariables?: WorkflowData;
-  nextNodeId?: string;
+  success: boolean
+  message: string
+  data?: Record<string, unknown>
+  extractedVariables?: WorkflowData
+  nextNodeId?: string
 }
 
 export interface LogEntry {
-  workflowId: string;
-  triggerId?: string;
-  actionId?: string;
-  status: 'SUCCESS' | 'FAILURE' | 'SKIPPED' | 'ENQUEUED';
-  message: string;
-  context: Prisma.InputJsonValue;
-  executionId: string;
-  source?: string;
-  created_at?: Date | string;
+  workflowId: string
+  triggerId?: string
+  actionId?: string
+  status: 'SUCCESS' | 'FAILURE' | 'SKIPPED' | 'ENQUEUED'
+  message: string
+  context: Prisma.InputJsonValue
+  executionId: string
+  source?: string
+  created_at?: Date | string
 }
 
 // --- Configuration Types ---
 
 export interface DiscordActionConfig {
-  webhookUrl: string;
-  content: string;
-  username?: string;
+  webhookUrl: string
+  content: string
+  username?: string
 }
 
 export interface NotionActionConfig {
-  accountId: string;
-  databaseId: string;
-  properties: Record<string, unknown>;
+  accountId: string
+  databaseId: string
+  properties: Record<string, unknown>
 }
 
 export interface ConditionRule {
-  field: string;
-  operator: 'contains' | 'equals';
-  value: string;
+  field: string
+  operator: 'contains' | 'equals'
+  value: string
 }
 
 export interface ConditionConfig {
-  logicType?: 'AND' | 'OR';
-  conditions: ConditionRule[];
+  logicType?: 'AND' | 'OR'
+  conditions: ConditionRule[]
 }
 
 export interface HttpResponseMapping {
-  sourcePath: string;
-  targetVariable: string;
+  sourcePath: string
+  targetVariable: string
 }
 
 export interface HttpActionConfig {
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  url: string;
-  headers?: Record<string, string>;
-  body?: string;
-  responseMapping?: HttpResponseMapping[];
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  url: string
+  headers?: Record<string, string>
+  body?: string
+  responseMapping?: HttpResponseMapping[]
 }
 
-export type ActionConfig = 
-  | DiscordActionConfig 
-  | NotionActionConfig 
-  | ConditionConfig 
-  | HttpActionConfig 
-  | Record<string, unknown>;
+export type ActionConfig =
+  | DiscordActionConfig
+  | NotionActionConfig
+  | ConditionConfig
+  | HttpActionConfig
+  | Record<string, unknown>
 
 export interface GlobalSettings {
-  enableFailureAlert: boolean;
-  failureWebhookUrl: string;
+  enableFailureAlert: boolean
+  failureWebhookUrl: string
 }
 
 // --- UI / React Flow Types ---
 
 export interface WorkflowNode {
-  id: string;
-  type: 'action' | 'action-notion' | 'action-http' | 'condition' | 'trigger-webhook' | string;
+  id: string
+  type:
+    | 'action'
+    | 'action-notion'
+    | 'action-http'
+    | 'condition'
+    | 'trigger-webhook'
+    | string
   data: {
-    label: string;
-    config: ActionConfig;
-  };
+    label: string
+    config: ActionConfig
+  }
 }
 
 export interface WorkflowEdge {
-  id: string;
-  source: string;
-  target: string;
-  sourceHandle?: 'true' | 'false' | null;
+  id: string
+  source: string
+  target: string
+  sourceHandle?: 'true' | 'false' | null
 }
 
 export interface UIConfig {
-  nodes: WorkflowNode[];
-  edges: WorkflowEdge[];
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
 }
