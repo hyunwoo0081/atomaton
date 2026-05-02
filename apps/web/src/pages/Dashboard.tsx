@@ -4,48 +4,40 @@ import { Button, Card } from '@atomaton/ui';
 import { api } from '../utils/api';
 import { LogTable } from '../components/LogTable';
 import { useQuery } from '@tanstack/react-query';
+import { LogEntry } from '../types/workflow';
 
-interface Workflow {
+interface WorkflowShort {
   id: string;
   name: string;
   is_active: boolean;
   created_at: string;
 }
 
-interface Log {
-  id: string;
-  workflowId: string;
-  triggerId: string;
-  actionId?: string;
-  status: 'SUCCESS' | 'FAILURE' | 'SKIPPED' | 'ENQUEUED';
-  message: string;
-  created_at: string;
-}
-
 export const Dashboard: React.FC = () => {
-  const { data: workflows = [], isLoading: isLoadingWorkflows } = useQuery({
+  const { data: workflows = [], isLoading: isLoadingWorkflows } = useQuery<WorkflowShort[]>({
     queryKey: ['workflows'],
-    queryFn: () => api.get<Workflow[]>('/workflows'),
+    queryFn: () => api.get<WorkflowShort[]>('/workflows'),
   });
 
-  const { data: logsData, isLoading: isLoadingLogs } = useQuery({
+  const { data: logsData, isLoading: isLoadingLogs } = useQuery<{ logs: LogEntry[] }>({
     queryKey: ['logs'],
-    queryFn: () => api.get<{ logs: Log[] }>('/logs?limit=10'),
+    queryFn: () => api.get<{ logs: LogEntry[] }>('/logs?limit=10'),
   });
 
   const logs = logsData?.logs || [];
   const isLoading = isLoadingWorkflows || isLoadingLogs;
 
   const createWorkflow = async () => {
-    const name = prompt('Enter workflow name:');
+    const name = window.prompt('Enter workflow name:');
     if (!name) return;
 
     try {
       await api.post('/workflows', { name });
       window.location.reload(); 
-    } catch (error) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to create workflow';
       console.error('Failed to create workflow:', error);
-      alert('Failed to create workflow');
+      alert(message);
     }
   };
 
