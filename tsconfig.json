@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "moduleResolution": "Node",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "baseUrl": ".",
+    "paths": {
+      "@atomaton/db": ["packages/db/src"],
+      "@atomaton/db/*": ["packages/db/src/*"],
+      "@atomaton/ui": ["packages/ui/src"]
+    }
+  },
+  "exclude": ["node_modules", "dist", "build"]
+}
