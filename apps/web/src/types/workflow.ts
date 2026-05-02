@@ -40,7 +40,7 @@ export interface DiscordActionConfig extends BaseNodeConfig {
 export interface NotionActionConfig extends BaseNodeConfig {
   accountId?: string;
   databaseId?: string;
-  properties?: string | Record<string, any>;
+  properties?: string | Record<string, unknown>;
 }
 
 export interface ConditionNodeConfig extends BaseNodeConfig {
@@ -74,7 +74,7 @@ export interface CustomNodeData {
   label: string;
   config: NodeConfig;
   isValid: boolean;
-  originalData?: Record<string, any>;
+  originalData?: Record<string, unknown>;
 }
 
 // --- Test & Log Interfaces ---
@@ -84,7 +84,7 @@ export interface LogEntry {
   actionId?: string;
   status: 'SUCCESS' | 'FAILURE' | 'SKIPPED' | 'ENQUEUED';
   message: string;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   executionId?: string;
   created_at?: string;
 }
@@ -95,7 +95,7 @@ export interface TestResult {
   error?: string;
 }
 
-// --- Account Interfaces (Restored) ---
+// --- Account Interfaces ---
 export interface NaverImapAccountConfig {
   username: string;
   password?: string;
@@ -130,12 +130,12 @@ export interface WorkflowBackendData {
   trigger?: {
     id: string;
     type: string;
-    config: any;
+    config: NodeConfig;
   } | null;
   actions: {
     id: string;
     type: string;
-    config: any;
+    config: NodeConfig;
     order: number;
   }[];
   ui_config?: { nodes: Node<CustomNodeData>[]; edges: Edge[] } | null;

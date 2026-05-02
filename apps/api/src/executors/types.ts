@@ -16,6 +16,17 @@ export interface ActionResult {
   nextNodeId?: string;
 }
 
+export interface LogEntry {
+  workflowId: string;
+  triggerId?: string;
+  actionId?: string;
+  status: string; // 'SUCCESS' | 'FAILURE' etc
+  message: string;
+  context: Record<string, any>;
+  executionId: string;
+  created_at?: Date | string;
+}
+
 // --- Config Interfaces ---
 
 export interface DiscordActionConfig {

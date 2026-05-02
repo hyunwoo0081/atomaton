@@ -1,7 +1,27 @@
 module.exports = {
   root: true,
-  // This tells ESLint to load the config from the package `eslint-config-custom`
-  extends: ["@atomaton/config/eslint-preset"],
+  env: {
+    browser: true,
+    es2021: true,
+    node: true
+  },
+  extends: [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "prettier"
+  ],
+  parser: "@typescript-eslint/parser",
+  parserOptions: {
+    ecmaVersion: "latest",
+    sourceType: "module"
+  },
+  plugins: [
+    "@typescript-eslint"
+  ],
+  rules: {
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }]
+  },
   settings: {
     next: {
       rootDir: ["apps/*/", "packages/*/"],

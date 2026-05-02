@@ -1,17 +1,11 @@
 import React, { useState } from 'react';
 import { Button } from '@atomaton/ui';
-
-interface TestResult {
-  status?: string;
-  logs?: any[];
-  error?: string;
-  [key: string]: any;
-}
+import { TestResult } from '../types/workflow';
 
 interface TestRunModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onRun: (inputData: Record<string, any>) => Promise<TestResult>;
+  onRun: (inputData: Record<string, string | number | boolean | null>) => Promise<TestResult>;
 }
 
 export const TestRunModal: React.FC<TestRunModalProps> = ({ isOpen, onClose, onRun }) => {

@@ -1,0 +1,32 @@
+import type { Edge, Node, OnConnect, OnEdgesChange, OnNodesChange, OnNodesDelete, XYPosition, ReactFlowInstance, OnConnectEnd } from 'reactflow';
+import { GlobalSettings, CustomNodeData } from '../types/workflow';
+interface WorkflowState {
+    nodes: Node<CustomNodeData>[];
+    edges: Edge[];
+    selectedNodeId: string | null;
+    isDirty: boolean;
+    isValid: boolean;
+    globalSettings: GlobalSettings;
+    isModalOpen: boolean;
+    modalPosition: XYPosition;
+    sourceNodeId: string | null;
+    sourceHandleId: string | null;
+    onNodesChange: OnNodesChange;
+    onEdgesChange: OnEdgesChange;
+    onConnect: OnConnect;
+    onConnectEnd: OnConnectEnd;
+    onDrop: (event: React.DragEvent, reactFlowInstance: ReactFlowInstance) => void;
+    onNodesDelete: OnNodesDelete;
+    deleteNode: (id: string) => void;
+    setSelectedNodeId: (id: string | null) => void;
+    updateNodeData: (id: string, data: Partial<CustomNodeData>) => void;
+    setNodes: (nodes: Node<CustomNodeData>[]) => void;
+    setEdges: (edges: Edge[]) => void;
+    validateWorkflow: () => void;
+    updateGlobalSettings: (settings: Partial<GlobalSettings>) => void;
+    openModal: (position: XYPosition, sourceNodeId?: string, sourceHandleId?: string) => void;
+    closeModal: () => void;
+    addNode: (type: string, position?: XYPosition) => void;
+}
+export declare const useWorkflowStore: import("zustand").UseBoundStore<import("zustand").StoreApi<WorkflowState>>;
+export {};

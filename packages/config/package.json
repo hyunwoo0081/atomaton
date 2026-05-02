@@ -2,7 +2,10 @@
   "name": "@atomaton/config",
   "version": "0.0.0",
   "private": true,
-  "main": "index.js",
+  "main": "eslint-preset.js",
+  "exports": {
+    "./eslint-preset": "./eslint-preset.js"
+  },
   "files": [
     "eslint-preset.js",
     "tsconfig.json"

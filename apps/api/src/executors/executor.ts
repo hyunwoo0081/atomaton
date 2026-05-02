@@ -2,34 +2,43 @@
 import { 
   WorkflowContext, 
   WorkflowNode, 
-  WorkflowEdge, 
   UIConfig, 
   HttpActionConfig, 
   DiscordActionConfig, 
   ConditionConfig, 
-  ActionResult 
+  ActionResult,
+  LogEntry
 } from './types';
 import prisma, { LogStatus } from '@atomaton/db';
 import axios, { AxiosError } from 'axios';
 
 // --- Templating Utility ---
-export const applyTemplate = (template: string, data: Record<string, string | number | boolean | null>): string => {
+export const applyTemplate = (template: string, data: Record<string, string | number | boolean | null | unknown>): string => {
   let result = template;
   for (const key in data) {
     const value = data[key];
-    result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value !== null ? String(value) : '');
+    result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value !== null && value !== undefined ? String(value) : '');
   }
   return result;
 };
 
 // --- Path Resolution Utility ---
-export const resolvePath = (obj: Record<string, any>, path: string): any => {
+export const resolvePath = (obj: Record<string, unknown> | unknown[], path: string): unknown => {
   if (!path) return undefined;
   const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.');
-  let current: any = obj;
+  
+  let current: unknown = obj;
   for (const part of parts) {
     if (current === null || current === undefined) return undefined;
-    current = current[part];
+    
+    if (Array.isArray(current)) {
+      const index = parseInt(part, 10);
+      current = current[index];
+    } else if (typeof current === 'object') {
+      current = (current as Record<string, unknown>)[part];
+    } else {
+      return undefined;
+    }
   }
   return current;
 };
@@ -64,17 +73,17 @@ export const executeHttpRequestAction = async (node: WorkflowNode, context: Work
       });
 
       if (response.status >= 200 && response.status < 300) {
-        const extractedVariables: Record<string, any> = {};
+        const extractedVariables: Record<string, unknown> = {};
         if (responseMapping && Array.isArray(responseMapping)) {
           for (const mapping of responseMapping) {
-            const value = resolvePath(response.data, mapping.sourcePath);
+            const value = resolvePath(response.data as Record<string, unknown>, mapping.sourcePath);
             if (value !== undefined) extractedVariables[mapping.targetVariable] = value;
           }
         }
         return { 
             success: true, 
             message: `HTTP ${method} successful`, 
-            data: response.data as Record<string, any>, 
+            data: response.data as Record<string, unknown>, 
             extractedVariables 
         };
       } else {
@@ -107,7 +116,7 @@ export const executeDiscordAction = async (node: WorkflowNode, context: Workflow
     try {
       if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 100));
       const response = await axios.post(webhookUrl, { content: templatedContent });
-      return { success: true, message: 'Discord action successful', data: response.data as Record<string, any> };
+      return { success: true, message: 'Discord action successful', data: response.data as Record<string, unknown> };
     } catch (error: unknown) {
       const axiosError = error as AxiosError;
       const status = axiosError.response?.status;
@@ -123,16 +132,13 @@ export const executeDiscordAction = async (node: WorkflowNode, context: Workflow
   return { success: false, message: 'Discord action failed after max retries' };
 };
 
-export const executeNotionAction = async (node: WorkflowNode, context: WorkflowContext): Promise<ActionResult> => {
-  // Notion action logic would go here, currently simulated
-  console.log('Simulating Notion action for node:', node.id);
+export const executeNotionAction = async (_node: WorkflowNode, _context: WorkflowContext): Promise<ActionResult> => {
   return { success: true, message: 'Notion action simulated' };
 };
 
 export const executeCondition = async (node: WorkflowNode, context: WorkflowContext): Promise<ActionResult> => {
   const config = node.data.config as ConditionConfig;
   const { conditions, logicType = 'AND' } = config;
-  
   if (!conditions || !Array.isArray(conditions)) return { success: false, message: 'Invalid condition configuration' };
 
   let result = logicType === 'AND';
@@ -140,19 +146,14 @@ export const executeCondition = async (node: WorkflowNode, context: WorkflowCont
     const { field, operator, value } = condition;
     const dataValue = context.data[field];
     let conditionMet = false;
-    
     if (dataValue !== undefined) {
       switch (operator) {
         case 'contains': conditionMet = String(dataValue).includes(value); break;
         case 'equals': conditionMet = String(dataValue) === value; break;
       }
     }
-    
-    if (logicType === 'AND') { 
-        if (!conditionMet) { result = false; break; } 
-    } else { 
-        if (conditionMet) { result = true; break; } 
-    }
+    if (logicType === 'AND') { if (!conditionMet) { result = false; break; } } 
+    else { if (conditionMet) { result = true; break; } }
   }
   return { success: true, message: `Condition evaluated to ${result}`, data: { result } };
 };
@@ -160,13 +161,12 @@ export const executeCondition = async (node: WorkflowNode, context: WorkflowCont
 export const executeWorkflow = async (
     context: WorkflowContext, 
     overrideWorkflowData?: UIConfig
-): Promise<any[] | undefined> => {
+): Promise<LogEntry[] | undefined> => {
   const { workflowId, triggerId, executionId, data } = context;
   try {
     let uiConfig: UIConfig;
-    if (overrideWorkflowData) {
-        uiConfig = overrideWorkflowData;
-    } else {
+    if (overrideWorkflowData) uiConfig = overrideWorkflowData;
+    else {
       const workflow = await prisma.workflow.findUnique({ where: { id: workflowId } });
       if (!workflow || !workflow.is_active || !workflow.ui_config) return;
       uiConfig = workflow.ui_config as unknown as UIConfig;
@@ -176,18 +176,16 @@ export const executeWorkflow = async (
     const triggerNode = nodes.find((n) => n.type.startsWith('trigger'));
     if (!triggerNode) throw new Error('No trigger node found');
 
-    let currentContext: WorkflowContext = { ...context };
+    const currentContext: WorkflowContext = { ...context };
     const executionQueue: string[] = [];
     edges.filter((e) => e.source === triggerNode.id).forEach((e) => executionQueue.push(e.target));
-    
     const visited = new Set<string>([triggerNode.id]);
-    const executionLogs: any[] = [];
+    const executionLogs: LogEntry[] = [];
 
     while (executionQueue.length > 0) {
       const nodeId = executionQueue.shift()!;
       if (visited.has(nodeId)) continue;
       visited.add(nodeId);
-      
       const node = nodes.find((n) => n.id === nodeId);
       if (!node) continue;
 
@@ -210,52 +208,26 @@ export const executeWorkflow = async (
             nextHandle = conditionResult.data?.result ? 'true' : 'false';
             break;
         }
-
-        const logEntry = { 
-            workflowId, 
-            triggerId, 
-            actionId: nodeId, 
-            status: actionResult.success ? LogStatus.SUCCESS : LogStatus.FAILURE, 
-            message: actionResult.message, 
-            context: actionResult.data || {}, 
-            executionId 
-        };
-        
-        await prisma.log.create({ data: logEntry });
+        const logEntry: LogEntry = { workflowId, triggerId, actionId: nodeId, status: actionResult.success ? LogStatus.SUCCESS : LogStatus.FAILURE, message: actionResult.message, context: actionResult.data || {}, executionId };
+        await prisma.log.create({ data: logEntry as any });
         executionLogs.push(logEntry);
-
         if (!actionResult.success) throw new Error(`Node ${nodeId} failed: ${actionResult.message}`);
-        
-        if (actionResult.data) {
-            currentContext.results[nodeId] = actionResult;
-        }
-
+        if (actionResult.data) currentContext.results[nodeId] = actionResult;
         const outgoingEdges = edges.filter((e) => e.source === nodeId);
         if (node.type === 'condition') {
           const targetEdge = outgoingEdges.find((e) => e.sourceHandle === nextHandle);
           if (targetEdge) executionQueue.push(targetEdge.target);
-        } else {
-            outgoingEdges.forEach((e) => executionQueue.push(e.target));
-        }
-      } catch (e: unknown) { 
-          throw e; 
-      }
+        } else outgoingEdges.forEach((e) => executionQueue.push(e.target));
+      } catch (e: unknown) { throw e; }
     }
     return executionLogs;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown workflow error';
-    const failLog = { 
-        workflowId, 
-        triggerId, 
-        status: LogStatus.FAILURE, 
-        message: `Workflow failed: ${errorMessage}`, 
-        context: data, 
-        executionId 
-    };
-    await prisma.log.create({ data: failLog });
+    const failLog: LogEntry = { workflowId, triggerId, status: LogStatus.FAILURE, message: `Workflow failed: ${errorMessage}`, context: data as Record<string, unknown>, executionId };
+    await prisma.log.create({ data: failLog as any });
     if (overrideWorkflowData) {
         const history = await prisma.log.findMany({ where: { executionId } });
-        return [...history, failLog];
+        return [...(history as unknown as LogEntry[]), failLog];
     }
   }
 };

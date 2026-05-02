@@ -2,6 +2,13 @@
 import { Request, Response } from 'express';
 import prisma from '@atomaton/db';
 
+interface LogWhereClause {
+  workflowId?: string;
+  workflow: {
+    userId: string;
+  };
+}
+
 export const getLogs = async (req: Request, res: Response) => {
   const userId = req.userId;
   const { workflowId, page = '1', limit = '25' } = req.query;
@@ -15,7 +22,7 @@ export const getLogs = async (req: Request, res: Response) => {
   const skip = (pageNum - 1) * limitNum;
 
   try {
-    const whereClause: any = {
+    const whereClause: LogWhereClause = {
       workflow: {
         userId: userId,
       },
@@ -26,13 +33,13 @@ export const getLogs = async (req: Request, res: Response) => {
     }
 
     const logs = await prisma.log.findMany({
-      where: whereClause,
+      where: whereClause as any, // Prisma type casting
       orderBy: { created_at: 'desc' },
       skip: skip,
       take: limitNum,
     });
 
-    const totalLogs = await prisma.log.count({ where: whereClause });
+    const totalLogs = await prisma.log.count({ where: whereClause as any });
 
     res.status(200).json({
       logs,
@@ -43,7 +50,7 @@ export const getLogs = async (req: Request, res: Response) => {
         totalPages: Math.ceil(totalLogs / limitNum),
       },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error fetching logs:', error);
     res.status(500).json({ message: 'Internal server error' });
   }

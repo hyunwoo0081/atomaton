@@ -2,7 +2,11 @@ import { Request, Response } from 'express';
 import prisma from '@atomaton/db';
 import { enqueue } from '../executors/queue';
 import { WorkflowContext } from '../executors/types';
-import { v4 as uuidv4 } from 'uuid'; // For generating unique execution IDs
+import { v4 as uuidv4 } from 'uuid';
+
+interface WebhookConfig {
+  apiKey?: string;
+}
 
 export const processWebhook = async (req: Request, res: Response) => {
   const { accountId, triggerId } = req.params;
@@ -21,12 +25,12 @@ export const processWebhook = async (req: Request, res: Response) => {
       include: { workflow: true },
     });
 
-    if (!trigger || trigger.workflow.userId !== accountId) { // Basic validation
+    if (!trigger || trigger.workflow.userId !== accountId) {
       return res.status(404).json({ message: 'Trigger not found or does not belong to account' });
     }
 
-    // Assuming a simple API key stored directly in the trigger config for now.
-    const storedApiKey = (trigger.config as any)?.apiKey;
+    const config = trigger.config as unknown as WebhookConfig;
+    const storedApiKey = config?.apiKey;
 
     if (!storedApiKey || storedApiKey !== apiKey) {
       return res.status(403).json({ message: 'Invalid API Key' });
@@ -39,28 +43,27 @@ export const processWebhook = async (req: Request, res: Response) => {
       triggerId: trigger.id,
       workflowId: trigger.workflowId,
       executionId: executionId,
-      data: body, // Webhook payload as data
+      data: body as Record<string, any>,
       results: {},
     };
 
-    enqueue(workflowContext); // Enqueue for execution
+    enqueue(workflowContext);
 
     await prisma.log.create({
       data: {
         workflowId: trigger.workflowId,
         triggerId: trigger.id,
-        status: 'ENQUEUED', // Initial status
+        status: 'ENQUEUED',
         message: `Webhook received for trigger ${triggerId}`,
-        context: body,
+        context: body as any,
         source: 'WEBHOOK',
         executionId: executionId,
       },
     });
 
     res.status(200).json({ message: 'Webhook received and processed' });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error processing webhook:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
-

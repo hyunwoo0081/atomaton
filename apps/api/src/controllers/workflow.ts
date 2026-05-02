@@ -2,10 +2,10 @@ import { Request, Response } from 'express';
 import prisma, { Prisma } from '@atomaton/db';
 import { executeWorkflow } from '../executors/executor';
 import { v4 as uuidv4 } from 'uuid';
-import { GlobalSettings, UIConfig } from '../executors/types';
+import { GlobalSettings, UIConfig, WorkflowNode, WorkflowEdge } from '../executors/types';
 
 export const createWorkflow = async (req: Request, res: Response) => {
-  const { name } = req.body;
+  const { name } = req.body as { name: string };
   const userId = req.userId;
 
   if (!userId) {
@@ -20,12 +20,12 @@ export const createWorkflow = async (req: Request, res: Response) => {
       data: {
         name,
         userId,
-        ui_config: { nodes: [], edges: [] },
-        settings: { enableFailureAlert: false, failureWebhookUrl: '' },
+        ui_config: { nodes: [], edges: [] } as any,
+        settings: { enableFailureAlert: false, failureWebhookUrl: '' } as any,
       },
     });
     res.status(201).json(workflow);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error creating workflow:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
@@ -51,7 +51,7 @@ export const getWorkflows = async (req: Request, res: Response) => {
       },
     });
     res.status(200).json(workflows);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error fetching workflows:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
@@ -83,7 +83,7 @@ export const getWorkflowById = async (req: Request, res: Response) => {
     }
 
     res.status(200).json(workflow);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error fetching workflow:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
@@ -92,8 +92,8 @@ export const getWorkflowById = async (req: Request, res: Response) => {
 interface UpdateWorkflowBody {
   name?: string;
   is_active?: boolean;
-  nodes?: any[]; // React Flow nodes
-  edges?: any[]; // React Flow edges
+  nodes?: WorkflowNode[];
+  edges?: WorkflowEdge[];
   globalSettings?: GlobalSettings;
 }
 
@@ -107,33 +107,28 @@ export const updateWorkflow = async (req: Request, res: Response) => {
   }
 
   try {
-    // 1. Update basic info and UI config
     const updateData: Prisma.WorkflowUpdateInput = {};
     if (name) updateData.name = name;
     if (is_active !== undefined) updateData.is_active = is_active;
-    if (nodes && edges) updateData.ui_config = { nodes, edges };
-    if (globalSettings) updateData.settings = globalSettings as any; // Prisma Json type workaround
+    if (nodes && edges) updateData.ui_config = { nodes, edges } as any;
+    if (globalSettings) updateData.settings = globalSettings as any;
 
-    // 2. Parse nodes/edges to update Trigger and Actions
     if (nodes && edges) {
       await prisma.$transaction(async (tx) => {
-        // Delete existing
         await tx.trigger.deleteMany({ where: { workflowId: id } });
         await tx.action.deleteMany({ where: { workflowId: id } });
 
-        // Create Trigger
         const triggerNode = nodes.find((n) => n.type.startsWith('trigger'));
-        if (triggerNode && triggerNode.data.config.accountId) {
+        if (triggerNode && (triggerNode.data.config as any).accountId) {
           await tx.trigger.create({
             data: {
               workflowId: id,
               type: triggerNode.type === 'trigger-webhook' ? 'WEBHOOK' : 'IMAP_POLLING',
-              config: triggerNode.data.config,
+              config: triggerNode.data.config as any,
             }
           });
         }
 
-        // Create Actions
         const actionNodes = nodes.filter((n) => n.type.startsWith('action') || n.type === 'condition');
         
         for (let i = 0; i < actionNodes.length; i++) {
@@ -141,25 +136,24 @@ export const updateWorkflow = async (req: Request, res: Response) => {
           let type = 'DISCORD_WEBHOOK';
           if (node.type === 'action-notion') type = 'NOTION_PAGE';
           if (node.type === 'condition') type = 'CONDITION';
+          if (node.type === 'action-http') type = 'HTTP_REQUEST';
 
           await tx.action.create({
             data: {
               workflowId: id,
               type,
-              config: { ...node.data.config, nodeId: node.id },
+              config: { ...node.data.config, nodeId: node.id } as any,
               order: i,
             }
           });
         }
 
-        // Update Workflow itself
         await tx.workflow.update({
           where: { id, userId },
           data: updateData,
         });
       });
     } else {
-      // Just update basic info if no nodes provided
       await prisma.workflow.update({
         where: { id, userId },
         data: updateData,
@@ -172,7 +166,7 @@ export const updateWorkflow = async (req: Request, res: Response) => {
     });
 
     res.status(200).json(updatedWorkflow);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error updating workflow:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
@@ -191,7 +185,7 @@ export const deleteWorkflow = async (req: Request, res: Response) => {
       where: { id, userId },
     });
     res.status(204).send();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error deleting workflow:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
@@ -199,7 +193,7 @@ export const deleteWorkflow = async (req: Request, res: Response) => {
 
 export const testWorkflow = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { nodes, edges, inputData } = req.body;
+  const { nodes, edges, inputData } = req.body as { nodes: WorkflowNode[]; edges: WorkflowEdge[]; inputData: Record<string, any> };
   const userId = req.userId;
 
   if (!userId) {
@@ -223,11 +217,12 @@ export const testWorkflow = async (req: Request, res: Response) => {
       logs,
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error testing workflow:', error);
     res.status(500).json({ 
       status: 'FAILURE',
-      message: error.message,
+      message: errorMessage,
       logs: [] 
     });
   }
