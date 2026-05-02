@@ -1,22 +1,32 @@
 // apps/api/src/executors/executor.ts
-import { WorkflowContext } from './types';
-import prisma, { Action, Trigger, LogStatus } from '@atomaton/db';
-import axios from 'axios';
+import { 
+  WorkflowContext, 
+  WorkflowNode, 
+  WorkflowEdge, 
+  UIConfig, 
+  HttpActionConfig, 
+  DiscordActionConfig, 
+  ConditionConfig, 
+  ActionResult 
+} from './types';
+import prisma, { LogStatus } from '@atomaton/db';
+import axios, { AxiosError } from 'axios';
 
 // --- Templating Utility ---
-export const applyTemplate = (template: string, data: Record<string, any>): string => {
+export const applyTemplate = (template: string, data: Record<string, string | number | boolean | null>): string => {
   let result = template;
   for (const key in data) {
-    result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), data[key]);
+    const value = data[key];
+    result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value !== null ? String(value) : '');
   }
   return result;
 };
 
 // --- Path Resolution Utility ---
-export const resolvePath = (obj: any, path: string): any => {
+export const resolvePath = (obj: Record<string, any>, path: string): any => {
   if (!path) return undefined;
   const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.');
-  let current = obj;
+  let current: any = obj;
   for (const part of parts) {
     if (current === null || current === undefined) return undefined;
     current = current[part];
@@ -26,18 +36,22 @@ export const resolvePath = (obj: any, path: string): any => {
 
 // --- Action Execution Functions ---
 
-export const executeHttpRequestAction = async (action: Action, context: WorkflowContext): Promise<{ success: boolean; message: string; data?: any }> => {
-  const config = action.config as any;
+export const executeHttpRequestAction = async (node: WorkflowNode, context: WorkflowContext): Promise<ActionResult> => {
+  const config = node.data.config as HttpActionConfig;
   const { method, url, headers, body, responseMapping } = config;
   if (!url || !method) return { success: false, message: 'HTTP URL or Method missing' };
 
   const templatedUrl = applyTemplate(url, context.data);
   const templatedHeaders: Record<string, string> = {};
-  if (headers) { for (const key in headers) templatedHeaders[key] = applyTemplate(headers[key], context.data); }
+  if (headers) { 
+    for (const key in headers) {
+        templatedHeaders[key] = applyTemplate(headers[key], context.data); 
+    }
+  }
   const templatedBody = body ? applyTemplate(body, context.data) : undefined;
 
   const maxRetries = 5;
-  const retryDelays = [100, 200, 300, 400, 500]; // Shortened for engine logic but test will use fake timers
+  const retryDelays = [100, 200, 300, 400, 500];
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
@@ -57,22 +71,35 @@ export const executeHttpRequestAction = async (action: Action, context: Workflow
             if (value !== undefined) extractedVariables[mapping.targetVariable] = value;
           }
         }
-        return { success: true, message: `HTTP ${method} successful`, data: { response: response.data, extractedVariables } };
+        return { 
+            success: true, 
+            message: `HTTP ${method} successful`, 
+            data: response.data as Record<string, any>, 
+            extractedVariables 
+        };
       } else {
         throw new Error(`HTTP failed with status: ${response.status}`);
       }
-    } catch (error: any) {
-      const status = error.response?.status;
-      const isRetryable = status >= 500 || status === 429 || !error.response;
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError;
+      const status = axiosError.response?.status;
+      const isRetryable = (status && (status >= 500 || status === 429)) || !axiosError.response;
+      
       if (isRetryable && attempt < maxRetries - 1) continue;
-      return { success: false, message: `HTTP action failed: ${error.response?.data?.message || error.message}` };
+      
+      const errorMessage = axiosError.response?.data 
+        ? JSON.stringify(axiosError.response.data) 
+        : (error instanceof Error ? error.message : 'Unknown error');
+        
+      return { success: false, message: `HTTP action failed: ${errorMessage}` };
     }
   }
   return { success: false, message: 'HTTP action failed after max retries' };
 };
 
-export const executeDiscordAction = async (action: Action, context: WorkflowContext): Promise<{ success: boolean; message: string; data?: any }> => {
-  const { webhookUrl, content } = action.config as any;
+export const executeDiscordAction = async (node: WorkflowNode, context: WorkflowContext): Promise<ActionResult> => {
+  const config = node.data.config as DiscordActionConfig;
+  const { webhookUrl, content } = config;
   if (!webhookUrl || !content) return { success: false, message: 'Discord webhook URL or content missing' };
 
   const templatedContent = applyTemplate(content, context.data);
@@ -80,23 +107,32 @@ export const executeDiscordAction = async (action: Action, context: WorkflowCont
     try {
       if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 100));
       const response = await axios.post(webhookUrl, { content: templatedContent });
-      return { success: true, message: 'Discord action successful', data: response.data };
-    } catch (error: any) {
-      const status = error.response?.status;
-      if ((status >= 500 || status === 429 || !error.response) && attempt < 4) continue;
-      return { success: false, message: `Discord action failed: ${error.response?.data?.message || error.message}` };
+      return { success: true, message: 'Discord action successful', data: response.data as Record<string, any> };
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError;
+      const status = axiosError.response?.status;
+      if ((status && (status >= 500 || status === 429)) || !axiosError.response) {
+          if (attempt < 4) continue;
+      }
+      const errorMessage = axiosError.response?.data 
+        ? JSON.stringify(axiosError.response.data) 
+        : (error instanceof Error ? error.message : 'Unknown error');
+      return { success: false, message: `Discord action failed: ${errorMessage}` };
     }
   }
   return { success: false, message: 'Discord action failed after max retries' };
 };
 
-export const executeNotionAction = async (action: Action, context: WorkflowContext): Promise<{ success: boolean; message: string; data?: any }> => {
+export const executeNotionAction = async (node: WorkflowNode, context: WorkflowContext): Promise<ActionResult> => {
+  // Notion action logic would go here, currently simulated
+  console.log('Simulating Notion action for node:', node.id);
   return { success: true, message: 'Notion action simulated' };
 };
 
-export const executeCondition = async (action: Action, context: WorkflowContext): Promise<{ success: boolean; message: string; nextNodeId?: string; data?: any }> => {
-  const { conditions } = action.config as any;
-  const logicType = (action.config as any).logicType || 'AND';
+export const executeCondition = async (node: WorkflowNode, context: WorkflowContext): Promise<ActionResult> => {
+  const config = node.data.config as ConditionConfig;
+  const { conditions, logicType = 'AND' } = config;
+  
   if (!conditions || !Array.isArray(conditions)) return { success: false, message: 'Invalid condition configuration' };
 
   let result = logicType === 'AND';
@@ -104,81 +140,122 @@ export const executeCondition = async (action: Action, context: WorkflowContext)
     const { field, operator, value } = condition;
     const dataValue = context.data[field];
     let conditionMet = false;
+    
     if (dataValue !== undefined) {
       switch (operator) {
         case 'contains': conditionMet = String(dataValue).includes(value); break;
         case 'equals': conditionMet = String(dataValue) === value; break;
       }
     }
-    if (logicType === 'AND') { if (!conditionMet) { result = false; break; } } 
-    else { if (conditionMet) { result = true; break; } }
+    
+    if (logicType === 'AND') { 
+        if (!conditionMet) { result = false; break; } 
+    } else { 
+        if (conditionMet) { result = true; break; } 
+    }
   }
   return { success: true, message: `Condition evaluated to ${result}`, data: { result } };
 };
 
-export const executeWorkflow = async (context: WorkflowContext, overrideWorkflowData?: { nodes: any[], edges: any[], settings?: any }) => {
+export const executeWorkflow = async (
+    context: WorkflowContext, 
+    overrideWorkflowData?: UIConfig
+): Promise<any[] | undefined> => {
   const { workflowId, triggerId, executionId, data } = context;
   try {
-    let uiConfig: any;
-    if (overrideWorkflowData) uiConfig = { nodes: overrideWorkflowData.nodes, edges: overrideWorkflowData.edges };
-    else {
+    let uiConfig: UIConfig;
+    if (overrideWorkflowData) {
+        uiConfig = overrideWorkflowData;
+    } else {
       const workflow = await prisma.workflow.findUnique({ where: { id: workflowId } });
-      if (!workflow || !workflow.is_active) return;
-      uiConfig = workflow.ui_config;
+      if (!workflow || !workflow.is_active || !workflow.ui_config) return;
+      uiConfig = workflow.ui_config as unknown as UIConfig;
     }
 
     const { nodes, edges } = uiConfig;
-    const triggerNode = nodes.find((n: any) => n.type.startsWith('trigger'));
+    const triggerNode = nodes.find((n) => n.type.startsWith('trigger'));
     if (!triggerNode) throw new Error('No trigger node found');
 
     let currentContext: WorkflowContext = { ...context };
-    const queue: string[] = [];
-    edges.filter((e: any) => e.source === triggerNode.id).forEach((e: any) => queue.push(e.target));
+    const executionQueue: string[] = [];
+    edges.filter((e) => e.source === triggerNode.id).forEach((e) => executionQueue.push(e.target));
+    
     const visited = new Set<string>([triggerNode.id]);
     const executionLogs: any[] = [];
 
-    while (queue.length > 0) {
-      const nodeId = queue.shift()!;
+    while (executionQueue.length > 0) {
+      const nodeId = executionQueue.shift()!;
       if (visited.has(nodeId)) continue;
       visited.add(nodeId);
-      const node = nodes.find((n: any) => n.id === nodeId);
+      
+      const node = nodes.find((n) => n.id === nodeId);
       if (!node) continue;
 
-      let actionResult: any = { success: true, message: 'Skipped' };
-      let nextHandle: string | null = null;
+      let actionResult: ActionResult = { success: true, message: 'Skipped' };
+      let nextHandle: 'true' | 'false' | null = null;
+
       try {
-        const actionModel = { ...node, config: node.data.config } as unknown as Action;
         switch (node.type) {
-          case 'action': actionResult = await executeDiscordAction(actionModel, currentContext); break;
-          case 'action-notion': actionResult = await executeNotionAction(actionModel, currentContext); break;
+          case 'action': actionResult = await executeDiscordAction(node, currentContext); break;
+          case 'action-notion': actionResult = await executeNotionAction(node, currentContext); break;
           case 'action-http': 
-            actionResult = await executeHttpRequestAction(actionModel, currentContext); 
-            if (actionResult.success && actionResult.data?.extractedVariables) {
-              currentContext.data = { ...currentContext.data, ...actionResult.data.extractedVariables };
+            actionResult = await executeHttpRequestAction(node, currentContext); 
+            if (actionResult.success && actionResult.extractedVariables) {
+              currentContext.data = { ...currentContext.data, ...actionResult.extractedVariables };
             }
             break;
           case 'condition': 
-            const conditionResult = await executeCondition(actionModel, currentContext);
+            const conditionResult = await executeCondition(node, currentContext);
             actionResult = conditionResult;
             nextHandle = conditionResult.data?.result ? 'true' : 'false';
             break;
         }
-        const logEntry = { workflowId, triggerId, actionId: nodeId, status: actionResult.success ? LogStatus.SUCCESS : LogStatus.FAILURE, message: actionResult.message, context: actionResult.data, executionId };
+
+        const logEntry = { 
+            workflowId, 
+            triggerId, 
+            actionId: nodeId, 
+            status: actionResult.success ? LogStatus.SUCCESS : LogStatus.FAILURE, 
+            message: actionResult.message, 
+            context: actionResult.data || {}, 
+            executionId 
+        };
+        
         await prisma.log.create({ data: logEntry });
         executionLogs.push(logEntry);
+
         if (!actionResult.success) throw new Error(`Node ${nodeId} failed: ${actionResult.message}`);
         
-        const outgoingEdges = edges.filter((e: any) => e.source === nodeId);
+        if (actionResult.data) {
+            currentContext.results[nodeId] = actionResult;
+        }
+
+        const outgoingEdges = edges.filter((e) => e.source === nodeId);
         if (node.type === 'condition') {
-          const targetEdge = outgoingEdges.find((e: any) => e.sourceHandle === nextHandle);
-          if (targetEdge) queue.push(targetEdge.target);
-        } else outgoingEdges.forEach((e: any) => queue.push(e.target));
-      } catch (e) { throw e; }
+          const targetEdge = outgoingEdges.find((e) => e.sourceHandle === nextHandle);
+          if (targetEdge) executionQueue.push(targetEdge.target);
+        } else {
+            outgoingEdges.forEach((e) => executionQueue.push(e.target));
+        }
+      } catch (e: unknown) { 
+          throw e; 
+      }
     }
     return executionLogs;
-  } catch (error: any) {
-    const failLog = { workflowId, triggerId, status: LogStatus.FAILURE, message: `Workflow failed: ${error.message}`, context: data, executionId };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown workflow error';
+    const failLog = { 
+        workflowId, 
+        triggerId, 
+        status: LogStatus.FAILURE, 
+        message: `Workflow failed: ${errorMessage}`, 
+        context: data, 
+        executionId 
+    };
     await prisma.log.create({ data: failLog });
-    if (overrideWorkflowData) return [...(await prisma.log.findMany({ where: { executionId } })), failLog];
+    if (overrideWorkflowData) {
+        const history = await prisma.log.findMany({ where: { executionId } });
+        return [...history, failLog];
+    }
   }
 };

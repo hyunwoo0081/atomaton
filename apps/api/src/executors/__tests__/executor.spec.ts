@@ -3,12 +3,11 @@ process.env.MASTER_KEY = 'this_is_a_32_byte_test_key_!!!!';
 
 import { describe, it, expect } from 'vitest';
 import { applyTemplate, executeCondition } from '../executor';
-import { Action, WorkflowContext } from '../types';
+import { WorkflowContext, WorkflowNode, ConditionConfig } from '../types';
 
 describe('Executor Utilities', () => {
 
   describe('applyTemplate', () => {
-    // --- Normal Cases ---
     it('should replace a single variable correctly', () => {
       const template = 'Hello {{name}}!';
       const data = { name: 'World' };
@@ -27,7 +26,6 @@ describe('Executor Utilities', () => {
       expect(applyTemplate(template, data)).toBe('x + x = 2x');
     });
 
-    // --- Edge Cases ---
     it('should leave the placeholder if the key is missing in data', () => {
       const template = 'Value: {{missing}}';
       const data = { other: 'value' };
@@ -54,64 +52,58 @@ describe('Executor Utilities', () => {
       results: {}
     };
 
-    // --- Normal Cases ---
+    const createConditionNode = (config: ConditionConfig): WorkflowNode => ({
+      id: 'cond-1',
+      type: 'condition',
+      data: { label: 'Test Condition', config: config as any } // Casting config to ActionConfig
+    });
+
     it('should return true for valid "contains" condition', async () => {
-      const action = {
-        config: {
+      const node = createConditionNode({
           conditions: [{ field: 'subject', operator: 'contains', value: 'Payment' }],
           logicType: 'AND'
-        }
-      } as any;
-      const result = await executeCondition(action, mockContext);
-      expect(result.data.result).toBe(true);
+      });
+      const result = await executeCondition(node, mockContext);
+      expect(result.data?.result).toBe(true);
     });
 
     it('should return true for valid "equals" condition', async () => {
-      const action = {
-        config: {
+      const node = createConditionNode({
           conditions: [{ field: 'status', operator: 'equals', value: 'pending' }],
           logicType: 'AND'
-        }
-      } as any;
-      const result = await executeCondition(action, mockContext);
-      expect(result.data.result).toBe(true);
+      });
+      const result = await executeCondition(node, mockContext);
+      expect(result.data?.result).toBe(true);
     });
 
     it('should return false if AND condition is not met', async () => {
-      const action = {
-        config: {
+      const node = createConditionNode({
           conditions: [
             { field: 'subject', operator: 'contains', value: 'Payment' },
             { field: 'status', operator: 'equals', value: 'completed' }
           ],
           logicType: 'AND'
-        }
-      } as any;
-      const result = await executeCondition(action, mockContext);
-      expect(result.data.result).toBe(false);
+      });
+      const result = await executeCondition(node, mockContext);
+      expect(result.data?.result).toBe(false);
     });
 
-    // --- Edge Cases ---
     it('should handle numeric comparison by converting to string', async () => {
-      const action = {
-        config: {
+      const node = createConditionNode({
           conditions: [{ field: 'amount', operator: 'equals', value: '50000' }],
           logicType: 'AND'
-        }
-      } as any;
-      const result = await executeCondition(action, mockContext);
-      expect(result.data.result).toBe(true);
+      });
+      const result = await executeCondition(node, mockContext);
+      expect(result.data?.result).toBe(true);
     });
 
     it('should return false (default) if the field does not exist in context data', async () => {
-      const action = {
-        config: {
+      const node = createConditionNode({
           conditions: [{ field: 'unknown_field', operator: 'equals', value: 'anything' }],
           logicType: 'AND'
-        }
-      } as any;
-      const result = await executeCondition(action, mockContext);
-      expect(result.data.result).toBe(false);
+      });
+      const result = await executeCondition(node, mockContext);
+      expect(result.data?.result).toBe(false);
     });
   });
 });

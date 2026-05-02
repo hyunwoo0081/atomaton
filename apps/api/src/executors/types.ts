@@ -3,10 +3,17 @@
 export interface WorkflowContext {
   triggerId: string;
   workflowId: string;
-  executionId: string; // Unique ID for each workflow run
-  data: Record<string, any>; // Data passed through the workflow (e.g., email data, webhook payload)
-  results: Record<string, any>; // Results from previous actions
-  // Add other context-specific properties as needed
+  executionId: string;
+  data: Record<string, string | number | boolean | null | any>; // Still need dynamic data but with stricter values
+  results: Record<string, ActionResult>;
+}
+
+export interface ActionResult {
+  success: boolean;
+  message: string;
+  data?: Record<string, any>;
+  extractedVariables?: Record<string, any>;
+  nextNodeId?: string;
 }
 
 // --- Config Interfaces ---
@@ -20,12 +27,12 @@ export interface DiscordActionConfig {
 export interface NotionActionConfig {
   accountId: string;
   databaseId: string;
-  properties: any; // JSON object
+  properties: Record<string, any>;
 }
 
 export interface ConditionRule {
   field: string;
-  operator: string;
+  operator: 'contains' | 'equals';
   value: string;
 }
 
@@ -35,8 +42,8 @@ export interface ConditionConfig {
 }
 
 export interface HttpResponseMapping {
-  sourcePath: string; // e.g., 'candidates[0].content.parts[0].text'
-  targetVariable: string; // e.g., 'gemini_result'
+  sourcePath: string;
+  targetVariable: string;
 }
 
 export interface HttpActionConfig {
@@ -54,7 +61,25 @@ export interface GlobalSettings {
   failureWebhookUrl: string;
 }
 
+// --- UI / React Flow Types ---
+
+export interface WorkflowNode {
+  id: string;
+  type: 'action' | 'action-notion' | 'action-http' | 'condition' | 'trigger-webhook' | string;
+  data: {
+    label: string;
+    config: ActionConfig;
+  };
+}
+
+export interface WorkflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: 'true' | 'false' | null;
+}
+
 export interface UIConfig {
-  nodes: any[]; // Can be more specific if we share types with frontend
-  edges: any[];
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
 }
