@@ -17,19 +17,16 @@ export interface ConditionRule {
 
 // --- Node Config Interfaces ---
 
-export interface BaseNodeConfig {
-  // Common config properties if any
-}
+export interface BaseNodeConfig {}
 
 export interface TriggerNodeConfig extends BaseNodeConfig {
   accountId?: string;
   mailbox?: string;
   interval?: number;
-  rules?: ConditionRule[]; // For IMAP trigger rules
+  rules?: ConditionRule[];
 }
 
 export interface WebhookTriggerNodeConfig extends BaseNodeConfig {
-  // Webhook specific config, e.g., generated URL, API Key
   webhookUrl?: string;
   apiKey?: string;
 }
@@ -37,13 +34,13 @@ export interface WebhookTriggerNodeConfig extends BaseNodeConfig {
 export interface DiscordActionConfig extends BaseNodeConfig {
   webhookUrl?: string;
   content?: string;
-  username?: string; // Bot name
+  username?: string;
 }
 
 export interface NotionActionConfig extends BaseNodeConfig {
   accountId?: string;
   databaseId?: string;
-  properties?: string | object; // JSON string or object
+  properties?: string | Record<string, any>;
 }
 
 export interface ConditionNodeConfig extends BaseNodeConfig {
@@ -51,20 +48,57 @@ export interface ConditionNodeConfig extends BaseNodeConfig {
   conditions?: ConditionRule[];
 }
 
-export type NodeConfig = TriggerNodeConfig | WebhookTriggerNodeConfig | DiscordActionConfig | NotionActionConfig | ConditionNodeConfig;
+export interface HttpResponseMapping {
+  sourcePath: string;
+  targetVariable: string;
+}
+
+export interface HttpActionConfig extends BaseNodeConfig {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  url?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  responseMapping?: HttpResponseMapping[];
+}
+
+export type NodeConfig = 
+  | TriggerNodeConfig 
+  | WebhookTriggerNodeConfig 
+  | DiscordActionConfig 
+  | NotionActionConfig 
+  | ConditionNodeConfig
+  | HttpActionConfig;
 
 // --- Custom Node Data for React Flow ---
 export interface CustomNodeData {
   label: string;
   config: NodeConfig;
   isValid: boolean;
-  originalData?: any; // Original data from backend, can be more specific later if needed
+  originalData?: Record<string, any>;
 }
 
-// --- Account Interfaces ---
+// --- Test & Log Interfaces ---
+export interface LogEntry {
+  workflowId: string;
+  triggerId?: string;
+  actionId?: string;
+  status: 'SUCCESS' | 'FAILURE' | 'SKIPPED' | 'ENQUEUED';
+  message: string;
+  context?: Record<string, any>;
+  executionId?: string;
+  created_at?: string;
+}
+
+export interface TestResult {
+  status?: string;
+  logs?: LogEntry[];
+  error?: string;
+}
+
+// --- Account Interfaces (Restored) ---
 export interface NaverImapAccountConfig {
   username: string;
-  password?: string; // Password is sent only on creation, not returned
+  password?: string;
   host?: string;
   port?: number;
 }
@@ -81,8 +115,7 @@ export interface AccountResponse {
   type: 'NAVER_IMAP' | 'NOTION';
   name: string;
   credentials: {
-    username?: string; // Only username is returned for IMAP, password is encrypted
-    // token is not returned for Notion
+    username?: string;
   };
   created_at: string;
   updated_at: string;
@@ -94,10 +127,19 @@ export interface WorkflowBackendData {
   name: string;
   is_active: boolean;
   userId: string;
-  trigger?: any; // Specific Trigger model from Prisma
-  actions: any[]; // Specific Action model from Prisma
-  ui_config?: { nodes: Node<CustomNodeData>[]; edges: Edge[] };
-  settings?: GlobalSettings;
+  trigger?: {
+    id: string;
+    type: string;
+    config: any;
+  } | null;
+  actions: {
+    id: string;
+    type: string;
+    config: any;
+    order: number;
+  }[];
+  ui_config?: { nodes: Node<CustomNodeData>[]; edges: Edge[] } | null;
+  settings?: GlobalSettings | null;
   created_at: string;
   updated_at: string;
 }

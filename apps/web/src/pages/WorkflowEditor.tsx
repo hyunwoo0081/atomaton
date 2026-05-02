@@ -23,14 +23,7 @@ import { NodeSelectionModal } from '../components/NodeSelectionModal';
 import { TestRunModal } from '../components/TestRunModal';
 import { Sidebar } from '../components/Sidebar';
 import { Button } from '@atomaton/ui';
-import type { WorkflowBackendData, CustomNodeData, NodeConfig, GlobalSettings } from '../types/workflow';
-
-interface TestResult {
-  status?: string;
-  logs?: any[];
-  error?: string;
-  [key: string]: any;
-}
+import type { WorkflowBackendData, CustomNodeData, NodeConfig, GlobalSettings, TestResult } from '../types/workflow';
 
 const WorkflowEditorContent: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -67,6 +60,7 @@ const WorkflowEditorContent: React.FC = () => {
     'trigger-webhook': TriggerNode,
     action: ActionNode,
     'action-notion': ActionNode,
+    'action-http': ActionNode,
     condition: ConditionNode,
   }), []);
 
@@ -78,7 +72,6 @@ const WorkflowEditorContent: React.FC = () => {
 
   useEffect(() => {
     if (workflow) {
-      // Load ui_config and settings from fetched workflow
       if (workflow.ui_config) {
         setNodes(workflow.ui_config.nodes);
         setEdges(workflow.ui_config.edges);
@@ -92,7 +85,6 @@ const WorkflowEditorContent: React.FC = () => {
     }
   }, [workflow, setNodes, setEdges, updateGlobalSettings]);
 
-  // Validate on mount and changes
   useEffect(() => {
     validateWorkflow();
   }, [nodes, validateWorkflow]);
@@ -110,7 +102,6 @@ const WorkflowEditorContent: React.FC = () => {
 
   const isValidConnection = useCallback(
     (connection: Connection) => {
-      // Prevent connecting to a source handle that is already connected
       const sourceHasConnection = edges.some(
         (edge) => edge.source === connection.source && edge.sourceHandle === connection.sourceHandle
       );
@@ -133,9 +124,10 @@ const WorkflowEditorContent: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['workflow', id] });
       alert('Workflow saved successfully!');
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Unknown error';
       console.error('Failed to save workflow:', error);
-      alert(`Failed to save workflow: ${error.message}`);
+      alert(`Failed to save workflow: ${message}`);
     },
   });
 
@@ -144,7 +136,7 @@ const WorkflowEditorContent: React.FC = () => {
     saveWorkflowMutation.mutate({ nodes, edges, globalSettings });
   };
 
-  const handleRunTest = async (inputData: Record<string, any>): Promise<TestResult> => {
+  const handleRunTest = async (inputData: Record<string, string | number | boolean | null>): Promise<TestResult> => {
     if (!id) throw new Error('Workflow ID is missing for test run.');
     try {
       const response = await api.post<TestResult>(`/workflows/${id}/test`, {
@@ -153,9 +145,10 @@ const WorkflowEditorContent: React.FC = () => {
         inputData,
       });
       return response;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Test run failed';
       console.error('Test run failed:', error);
-      throw new Error(error.message || 'Test run failed');
+      throw new Error(message);
     }
   };
 
@@ -178,7 +171,7 @@ const WorkflowEditorContent: React.FC = () => {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onConnectEnd={onConnectEnd as any} // Cast to any to bypass type mismatch
+          onConnectEnd={(_event) => onConnectEnd(_event)}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           onNodesDelete={onNodesDelete}
