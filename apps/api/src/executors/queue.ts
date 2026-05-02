@@ -15,6 +15,10 @@ export const setProcessor = (fn: ProcessorFunction) => {
   processQueue(); // Start processing if items are already in queue
 };
 
+export const resetProcessor = () => {
+  processor = null;
+};
+
 export const enqueue = (item: QueueItem) => {
   queue.push(item);
   processQueue();

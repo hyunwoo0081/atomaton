@@ -34,7 +34,20 @@ export interface ConditionConfig {
   conditions: ConditionRule[];
 }
 
-export type ActionConfig = DiscordActionConfig | NotionActionConfig | ConditionConfig;
+export interface HttpResponseMapping {
+  sourcePath: string; // e.g., 'candidates[0].content.parts[0].text'
+  targetVariable: string; // e.g., 'gemini_result'
+}
+
+export interface HttpActionConfig {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  url: string;
+  headers?: Record<string, string>;
+  body?: string;
+  responseMapping?: HttpResponseMapping[];
+}
+
+export type ActionConfig = DiscordActionConfig | NotionActionConfig | ConditionConfig | HttpActionConfig;
 
 export interface GlobalSettings {
   enableFailureAlert: boolean;
