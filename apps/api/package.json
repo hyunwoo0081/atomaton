@@ -7,7 +7,7 @@
     "dev": "ts-node -r tsconfig-paths/register src/index.ts",
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "lint": "eslint . --ext .ts"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@atomaton/db": "workspace:*",
@@ -21,12 +21,16 @@
     "uuid": "^14.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.21.0",
     "@types/axios": "^0.14.4",
     "@types/bcryptjs": "^3.0.0",
     "@types/express": "^4.17.17",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node-imap": "^0.9.3",
+    "eslint": "^9.21.0",
+    "eslint-config-prettier": "^10.1.0",
     "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0"
+    "tsconfig-paths": "^4.2.0",
+    "typescript-eslint": "^8.25.0"
   }
 }

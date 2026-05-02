@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
+import { useParams } from 'react-router-dom'
 import ReactFlow, {
   Background,
   Controls,
@@ -10,28 +10,34 @@ import ReactFlow, {
   type Connection,
   type Node,
   type Edge,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
-import { api } from '../utils/api';
-import { ConfigPanel } from '../components/ConfigPanel';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+} from 'reactflow'
+import 'reactflow/dist/style.css'
+import { api } from '../utils/api'
+import { ConfigPanel } from '../components/ConfigPanel'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useWorkflowStore } from '../store/workflowStore'
-import { TriggerNode } from '../components/nodes/TriggerNode';
-import { ActionNode } from '../components/nodes/ActionNode';
-import { ConditionNode } from '../components/nodes/ConditionNode';
-import { NodeSelectionModal } from '../components/NodeSelectionModal';
-import { TestRunModal } from '../components/TestRunModal';
-import { Sidebar } from '../components/Sidebar';
-import { Button } from '@atomaton/ui';
-import type { WorkflowBackendData, CustomNodeData, NodeConfig, GlobalSettings, TestResult } from '../types/workflow';
+import { TriggerNode } from '../components/nodes/TriggerNode'
+import { ActionNode } from '../components/nodes/ActionNode'
+import { ConditionNode } from '../components/nodes/ConditionNode'
+import { NodeSelectionModal } from '../components/NodeSelectionModal'
+import { TestRunModal } from '../components/TestRunModal'
+import { Sidebar } from '../components/Sidebar'
+import { Button } from '@atomaton/ui'
+import type {
+  WorkflowBackendData,
+  CustomNodeData,
+  NodeConfig,
+  GlobalSettings,
+  TestResult,
+} from '../types/workflow'
 
 const WorkflowEditorContent: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
-  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
-  const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const reactFlowInstance = useReactFlow();
-  const queryClient = useQueryClient();
-  
+  const { id } = useParams<{ id: string }>()
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false)
+  const reactFlowWrapper = useRef<HTMLDivElement>(null)
+  const reactFlowInstance = useReactFlow()
+  const queryClient = useQueryClient()
+
   const {
     nodes,
     edges,
@@ -53,41 +59,44 @@ const WorkflowEditorContent: React.FC = () => {
     addNode,
     globalSettings,
     updateGlobalSettings,
-  } = useWorkflowStore();
+  } = useWorkflowStore()
 
-  const nodeTypes: NodeTypes = useMemo(() => ({
-    trigger: TriggerNode,
-    'trigger-webhook': TriggerNode,
-    action: ActionNode,
-    'action-notion': ActionNode,
-    'action-http': ActionNode,
-    condition: ConditionNode,
-  }), []);
+  const nodeTypes: NodeTypes = useMemo(
+    () => ({
+      trigger: TriggerNode,
+      'trigger-webhook': TriggerNode,
+      action: ActionNode,
+      'action-notion': ActionNode,
+      'action-http': ActionNode,
+      condition: ConditionNode,
+    }),
+    []
+  )
 
   const { data: workflow, isLoading } = useQuery({
     queryKey: ['workflow', id],
     queryFn: () => api.get<WorkflowBackendData>(`/workflows/${id}`),
     enabled: !!id,
-  });
+  })
 
   useEffect(() => {
     if (workflow) {
       if (workflow.ui_config) {
-        setNodes(workflow.ui_config.nodes);
-        setEdges(workflow.ui_config.edges);
+        setNodes(workflow.ui_config.nodes)
+        setEdges(workflow.ui_config.edges)
       } else {
-        setNodes([]);
-        setEdges([]);
+        setNodes([])
+        setEdges([])
       }
       if (workflow.settings) {
-        updateGlobalSettings(workflow.settings);
+        updateGlobalSettings(workflow.settings)
       }
     }
-  }, [workflow, setNodes, setEdges, updateGlobalSettings]);
+  }, [workflow, setNodes, setEdges, updateGlobalSettings])
 
   useEffect(() => {
-    validateWorkflow();
-  }, [nodes, validateWorkflow]);
+    validateWorkflow()
+  }, [nodes, validateWorkflow])
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
@@ -97,73 +106,84 @@ const WorkflowEditorContent: React.FC = () => {
   )
 
   const onPaneClick = useCallback(() => {
-    setSelectedNodeId(null);
-  }, [setSelectedNodeId]);
+    setSelectedNodeId(null)
+  }, [setSelectedNodeId])
 
   const isValidConnection = useCallback(
     (connection: Connection) => {
       const sourceHasConnection = edges.some(
-        (edge) => edge.source === connection.source && edge.sourceHandle === connection.sourceHandle
-      );
-      return !sourceHasConnection;
+        (edge) =>
+          edge.source === connection.source &&
+          edge.sourceHandle === connection.sourceHandle
+      )
+      return !sourceHasConnection
     },
     [edges]
-  );
+  )
 
   const handleConfigSave = (newConfig: NodeConfig) => {
     if (selectedNodeId) {
-      updateNodeData(selectedNodeId, { config: newConfig });
+      updateNodeData(selectedNodeId, { config: newConfig })
     }
-  };
+  }
 
   const saveWorkflowMutation = useMutation({
-    mutationFn: (data: { nodes: Node<CustomNodeData>[]; edges: Edge[]; globalSettings: GlobalSettings }) => {
-      return api.put(`/workflows/${id}`, data);
+    mutationFn: (data: {
+      nodes: Node<CustomNodeData>[]
+      edges: Edge[]
+      globalSettings: GlobalSettings
+    }) => {
+      return api.put(`/workflows/${id}`, data)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflow', id] });
-      alert('Workflow saved successfully!');
+      queryClient.invalidateQueries({ queryKey: ['workflow', id] })
+      alert('Workflow saved successfully!')
     },
     onError: (error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Failed to save workflow:', error);
-      alert(`Failed to save workflow: ${message}`);
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      console.error('Failed to save workflow:', error)
+      alert(`Failed to save workflow: ${message}`)
     },
-  });
+  })
 
   const handleSaveWorkflow = async () => {
-    if (!id) return;
-    saveWorkflowMutation.mutate({ nodes, edges, globalSettings });
-  };
+    if (!id) return
+    saveWorkflowMutation.mutate({ nodes, edges, globalSettings })
+  }
 
-  const handleRunTest = async (inputData: Record<string, string | number | boolean | null>): Promise<TestResult> => {
-    if (!id) throw new Error('Workflow ID is missing for test run.');
+  const handleRunTest = async (
+    inputData: Record<string, string | number | boolean | null>
+  ): Promise<TestResult> => {
+    if (!id) throw new Error('Workflow ID is missing for test run.')
     try {
       const response = await api.post<TestResult>(`/workflows/${id}/test`, {
         nodes,
         edges,
         inputData,
-      });
-      return response;
+      })
+      return response
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Test run failed';
-      console.error('Test run failed:', error);
-      throw new Error(message);
+      const message = error instanceof Error ? error.message : 'Test run failed'
+      console.error('Test run failed:', error)
+      throw new Error(message)
     }
-  };
+  }
 
   const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
 
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId)
 
-  if (isLoading) return <div>Loading...</div>;
+  if (isLoading) return <div>Loading...</div>
 
   return (
     <div className="h-full flex">
-      <Sidebar onSave={handleSaveWorkflow} onTest={() => setIsTestModalOpen(true)} />
+      <Sidebar
+        onSave={handleSaveWorkflow}
+        onTest={() => setIsTestModalOpen(true)}
+      />
       <div className="flex-1 relative" ref={reactFlowWrapper}>
         <ReactFlow
           nodes={nodes}
@@ -171,7 +191,9 @@ const WorkflowEditorContent: React.FC = () => {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onConnectEnd={(_event) => onConnectEnd(_event)}
+          onConnectEnd={(_event, connectionState) =>
+            onConnectEnd(_event, connectionState)
+          }
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           onNodesDelete={onNodesDelete}
@@ -182,15 +204,24 @@ const WorkflowEditorContent: React.FC = () => {
           fitView
           style={{ background: 'transparent' }}
         >
-          <Background color="#ffffff" gap={16} size={1} style={{ opacity: 0.1 }} />
+          <Background
+            color="#ffffff"
+            gap={16}
+            size={1}
+            style={{ opacity: 0.1 }}
+          />
           <Controls className="bg-white/10 backdrop-blur-md border border-white/10 rounded-lg overflow-hidden" />
         </ReactFlow>
-        
+
         {nodes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="bg-white/5 backdrop-blur-xl p-8 rounded-3xl border border-white/10 text-center pointer-events-auto shadow-2xl">
-              <h3 className="text-xl font-bold mb-2 text-white">Start your workflow</h3>
-              <p className="text-white/50 mb-6">Drag a trigger from the sidebar or click below.</p>
+              <h3 className="text-xl font-bold mb-2 text-white">
+                Start your workflow
+              </h3>
+              <p className="text-white/50 mb-6">
+                Drag a trigger from the sidebar or click below.
+              </p>
               <Button onClick={() => addNode('trigger', { x: 250, y: 250 })}>
                 Add Trigger
               </Button>
@@ -198,7 +229,7 @@ const WorkflowEditorContent: React.FC = () => {
           </div>
         )}
       </div>
-      
+
       {selectedNode && (
         <ConfigPanel
           nodeId={selectedNode.id}
@@ -222,13 +253,13 @@ const WorkflowEditorContent: React.FC = () => {
         onRun={handleRunTest}
       />
     </div>
-  );
-};
+  )
+}
 
 export const WorkflowEditor: React.FC = () => {
   return (
     <ReactFlowProvider>
       <WorkflowEditorContent />
     </ReactFlowProvider>
-  );
-};
+  )
+}

@@ -11,8 +11,8 @@
     "workflowId": "string",
     "triggerId": "string",
     "executionId": "string",
-    "data": "Record<string, any> (Directly accessible via {{key}})",
-    "results": "Record<string, any> (Nested execution results from nodes)"
+    "data": "Record<string, unknown> (Directly accessible via {{key}})",
+    "results": "Record<string, unknown> (Nested execution results from nodes)"
   },
   "node_types": {
     "triggers": [
