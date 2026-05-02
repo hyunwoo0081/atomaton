@@ -1,34 +1,28 @@
-# `any` 타입 제거 및 리팩토링 체크리스트
+# Any 타입 제거 체크리스트
 
-이 문서는 프로젝트 전반에 퍼져있는 `any` 타입을 제거하고, 구체적인 타입 정의를 적용하여 코드의 안정성과 가독성을 높이기 위한 작업 목록입니다.
+이 문서는 프로젝트 내의 `any` 타입을 단계별로 제거하기 위한 가이드라인입니다.
 
-## 1. 프론트엔드 (`apps/web`)
+## 1. 개요
+`any` 타입은 TypeScript의 타입 시스템을 무력화시키고 런타임 에러의 원인이 됩니다. 모든 `any`는 구체적인 인터페이스나 `unknown`으로 대체되어야 합니다.
 
-### 완료된 작업
-- [x] **공통 타입 정의 (`apps/web/src/types/workflow.ts`)**: `NodeConfig`, `WorkflowBackendData`, `AccountResponse` 등 핵심 인터페이스 정의 완료.
-- [x] **상태 관리 (`apps/web/src/store/workflowStore.ts`)**: Zustand 스토어의 `nodes`, `edges`, `config` 관련 `any` 제거 완료.
-- [x] **페이지 (`apps/web/src/pages/WorkflowEditor.tsx`)**: 워크플로우 데이터 로딩/저장 로직의 `any` 제거 완료.
-- [x] **컴포넌트 (`apps/web/src/components/ConfigPanel.tsx`)**: 설정 패널의 `config` 및 핸들러 관련 `any` 제거 완료.
-- [x] **컴포넌트 (`apps/web/src/components/AccountConnectionModal.tsx`)**: 계정 설정 관련 `any` 제거 완료.
-- [x] **`apps/web/src/components/TestRunModal.tsx`**
-    - [x] `inputData` (JSON string), `result` (Execution Result) 타입 정의 및 적용.
-    - [x] `onRun` 함수의 반환 타입 구체화.
-- [x] **`apps/web/src/utils/api.ts`**
-    - [x] `request` 함수의 `body: any`를 `unknown` 또는 제네릭으로 변경 고려.
-    - [x] `error` 처리 시 `any` 대신 `unknown` 사용 및 타입 가드 적용.
+## 2. 체크리스트
 
-## 2. 백엔드 (`apps/api`)
+### 2.1. API Layer (apps/api)
+- [x] `Request.userId` 확장 시 `any` 제거 -> `JwtPayload` 인터페이스 적용.
+- [x] `request` 함수의 `body` 타입을 제네릭으로 변경 고려.
+- [x] Prisma JSON 필드(`config`, `settings`) 할당 시 `unknown` 경유 명시적 캐스팅 적용.
 
-### 완료된 작업
-- [x] **`apps/api/src/executors/executor.ts` (Priority: High)**
-    - [x] `action.config as any` -> `ActionConfig` 인터페이스 정의 및 적용.
-    - [x] `node.data.config` 접근 시 타입 단언 구체화.
-    - [x] `executeWorkflow`의 `overrideWorkflowData` 타입 구체화.
-- [x] **`apps/api/src/controllers/workflow.ts`**
-    - [x] `req.body`의 `nodes`, `edges`, `globalSettings` 타입 정의.
-    - [x] `updateData: any` -> `Prisma.WorkflowUpdateInput` 활용.
-- [x] **`apps/api/src/services/imapPolling.ts`**
-    - [x] `account.credentials as any` -> `ImapCredentials` 인터페이스 정의.
-    - [x] `trigger.config as any` -> `TriggerConfig` 인터페이스 정의.
-- [x] **`apps/api/src/controllers/auth.ts`**
-    - [x] `error: any` -> `unknown` 및 타입 가드(`instanceof Error`) 적용.
+### 2.2. Executor Engine
+- [x] `action.config` -> `ActionConfig` 인터페이스 정의 및 적용.
+- [x] `WorkflowContext.data` -> `WorkflowData (Record<string, unknown>)` 적용.
+- [x] `updateData` -> `Prisma.WorkflowUpdateInput` 활용.
+- [x] `account.credentials` -> `ImapCredentials` 인터페이스 정의.
+- [x] `trigger.config` -> `TriggerConfig` 인터페이스 정의.
+
+### 2.3. Error Handling
+- [x] `catch (error)` -> `unknown` 및 타입 가드(`instanceof Error`) 적용.
+
+## 3. 원칙
+1. 가능한 구체적인 인터페이스를 정의한다.
+2. 외부 데이터 수신 시에는 `unknown`을 사용하고 타입 가드로 좁힌다(Narrowing).
+3. 명시적 타입 캐스팅을 최소화하고 설계를 우선 재검토한다.
