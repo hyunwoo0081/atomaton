@@ -4,13 +4,16 @@ process.env.MASTER_KEY = 'this_is_a_32_byte_test_key_!!!!';
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import axios from 'axios';
 import { resolvePath, executeWorkflow } from '../executor';
-import { WorkflowContext, UIConfig } from '../types';
+import { WorkflowContext, UIConfig, ActionConfig } from '../types';
 
 // Mock axios correctly
 vi.mock('axios', () => {
   const mockAxios = vi.fn();
-  (mockAxios as any).post = vi.fn();
-  return { default: mockAxios };
+  (mockAxios as unknown as { post: unknown }).post = vi.fn();
+  return { 
+      default: mockAxios,
+      __esModule: true
+  };
 });
 
 const mockedAxios = axios as unknown as Mock & { post: Mock };
@@ -40,7 +43,7 @@ describe('HTTP Request Node & Path Resolution', () => {
   describe('resolvePath', () => {
     it('should resolve deep paths', () => {
       const data = { a: { b: [{ c: 'target' }] } };
-      expect(resolvePath(data, 'a.b[0].c')).toBe('target');
+      expect(resolvePath(data as unknown as Record<string, unknown>, 'a.b[0].c')).toBe('target');
     });
   });
 
@@ -54,17 +57,17 @@ describe('HTTP Request Node & Path Resolution', () => {
 
       const workflow: UIConfig = {
         nodes: [
-          { id: 't1', type: 'trigger-webhook', data: { label: 'T', config: {} as any } },
+          { id: 't1', type: 'trigger-webhook', data: { label: 'T', config: {} as unknown as ActionConfig } },
           { id: 'h1', type: 'action-http', data: { 
             label: 'H',
             config: { 
               method: 'POST', url: 'https://api.com', body: '{"m":"{{msg}}"}',
               responseMapping: [{ sourcePath: 'ans', targetVariable: 'res' }]
-            } as any
+            } as unknown as ActionConfig
           } },
           { id: 'd1', type: 'action', data: { 
             label: 'D',
-            config: { webhookUrl: 'https://disc.com', content: 'Result: {{res}}' } as any
+            config: { webhookUrl: 'https://disc.com', content: 'Result: {{res}}' } as unknown as ActionConfig
           } }
         ],
         edges: [
@@ -100,10 +103,10 @@ describe('HTTP Request Node & Path Resolution', () => {
   
         const workflow: UIConfig = {
             nodes: [
-                { id: 't1', type: 'trigger', data: { label: 'T', config: {} as any } },
+                { id: 't1', type: 'trigger', data: { label: 'T', config: {} as unknown as ActionConfig } },
                 { id: 'h1', type: 'action-http', data: { 
                     label: 'H',
-                    config: { method: 'GET', url: 'https://api.example.com' } as any 
+                    config: { method: 'GET', url: 'https://api.example.com' } as unknown as ActionConfig 
                 } }
             ],
             edges: [{ id: 'e1', source: 't1', target: 'h1' }]

@@ -3,7 +3,7 @@ process.env.MASTER_KEY = 'this_is_a_32_byte_test_key_!!!!';
 
 import { describe, it, expect } from 'vitest';
 import { applyTemplate, executeCondition } from '../executor';
-import { WorkflowContext, WorkflowNode, ConditionConfig } from '../types';
+import { WorkflowContext, WorkflowNode, ConditionConfig, ActionConfig } from '../types';
 
 describe('Executor Utilities', () => {
 
@@ -55,7 +55,10 @@ describe('Executor Utilities', () => {
     const createConditionNode = (config: ConditionConfig): WorkflowNode => ({
       id: 'cond-1',
       type: 'condition',
-      data: { label: 'Test Condition', config: config as any } // Casting config to ActionConfig
+      data: { 
+          label: 'Test Condition', 
+          config: config as unknown as ActionConfig 
+      }
     });
 
     it('should return true for valid "contains" condition', async () => {

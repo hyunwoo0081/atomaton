@@ -7,6 +7,13 @@
 /build
 /.output
 /.vite
+*.tsbuildinfo
+*.js
+*.d.ts
+!jest.config.js
+!vitest.config.ts
+!eslint-preset.js
+!.eslintrc.js
 
 # Logs
 npm-debug.log*

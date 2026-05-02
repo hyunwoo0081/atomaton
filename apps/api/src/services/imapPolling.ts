@@ -1,8 +1,8 @@
 import Imap from 'node-imap';
-import prisma from '@atomaton/db';
+import prisma, { Prisma } from '@atomaton/db';
 import { decrypt } from '@atomaton/db/crypto';
 import { enqueue } from '../executors/queue';
-import { WorkflowContext } from '../executors/types';
+import { WorkflowData } from '../executors/types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface ImapCredentials {
@@ -19,8 +19,14 @@ interface TriggerConfig {
   interval?: number;
 }
 
-const MIN_POLLING_INTERVAL_MIN = 1;
+interface ParsedMailHeaders {
+  from?: string[];
+  subject?: string[];
+  date?: string[];
+  'message-id'?: string[];
+}
 
+const MIN_POLLING_INTERVAL_MIN = 1;
 const pollingIntervals: Map<string, NodeJS.Timeout> = new Map();
 
 const getImapConnectionDetails = async (accountId: string): Promise<Imap.Config> => {
@@ -52,15 +58,9 @@ export const startImapPolling = async (accountId: string, intervalMin: number, r
   const maxRetries = 5;
   const baseRetryDelayMs = 1000;
 
-  if (pollingIntervals.has(accountId) && retryAttempt === 0) {
-    console.log(`Polling already active for account ${accountId}`);
-    return;
-  }
+  if (pollingIntervals.has(accountId) && retryAttempt === 0) return;
 
   const pollingInterval = Math.max(intervalMin, MIN_POLLING_INTERVAL_MIN);
-  if (retryAttempt === 0) {
-    console.log(`Starting IMAP polling for account ${accountId} every ${pollingInterval} minutes.`);
-  }
 
   const poll = async () => {
     try {
@@ -73,11 +73,7 @@ export const startImapPolling = async (accountId: string, intervalMin: number, r
 
           imap.search(['UNSEEN'], async (searchErr, uids) => {
             if (searchErr) throw searchErr;
-
-            if (!uids || uids.length === 0) {
-              imap.end();
-              return;
-            }
+            if (!uids || uids.length === 0) { imap.end(); return; }
 
             const fetch = imap.fetch(uids, {
               bodies: ['HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID)'],
@@ -86,21 +82,15 @@ export const startImapPolling = async (accountId: string, intervalMin: number, r
 
             fetch.on('message', (msg) => {
               let uid: number;
-              let headers: Record<string, string[]> | undefined;
+              let headers: ParsedMailHeaders | undefined;
               let buffer = '';
 
               msg.on('body', (stream) => {
-                stream.on('data', (chunk: Buffer) => {
-                  buffer += chunk.toString('utf8');
-                });
-                stream.once('end', () => {
-                  headers = Imap.parseHeader(buffer);
-                });
+                stream.on('data', (chunk: Buffer) => { buffer += chunk.toString('utf8'); });
+                stream.once('end', () => { headers = Imap.parseHeader(buffer) as unknown as ParsedMailHeaders; });
               });
 
-              msg.once('attributes', (attrs) => {
-                uid = attrs.uid;
-              });
+              msg.once('attributes', (attrs) => { uid = attrs.uid; });
 
               msg.once('end', async () => {
                 if (!uid || !headers) return;
@@ -113,28 +103,16 @@ export const startImapPolling = async (accountId: string, intervalMin: number, r
                 });
 
                 const trigger = triggers.find(t => (t.config as unknown as TriggerConfig).accountId === accountId);
-
-                if (!trigger) {
-                  imap.addFlags(uid, ['Seen'], (err) => {
-                      if (err) console.error(`Error marking email ${uid} as seen:`, err);
-                    });
-                  return;
-                }
+                if (!trigger) { imap.addFlags(uid, ['Seen'], () => {}); return; }
 
                 if (messageId) {
                   const existingLog = await prisma.log.findFirst({
                     where: { message: messageId, source: 'NAVER_IMAP' },
                   });
-
-                  if (existingLog) {
-                    imap.addFlags(uid, ['Seen'], (err) => {
-                      if (err) console.error(`Error marking email ${uid} as seen:`, err);
-                    });
-                    return;
-                  }
+                  if (existingLog) { imap.addFlags(uid, ['Seen'], () => {}); return; }
                 }
 
-                const emailData = {
+                const emailData: WorkflowData = {
                   messageId: messageId,
                   uid: uid,
                   receivedAt: headers.date ? new Date(headers.date[0]).toISOString() : new Date().toISOString(),
@@ -145,15 +123,13 @@ export const startImapPolling = async (accountId: string, intervalMin: number, r
                 };
 
                 const executionId = uuidv4();
-                const workflowContext: WorkflowContext = {
+                enqueue({
                   triggerId: trigger.id,
                   workflowId: trigger.workflowId,
                   executionId: executionId,
                   data: emailData,
                   results: {},
-                };
-
-                enqueue(workflowContext);
+                });
 
                 await prisma.log.create({
                   data: {
@@ -161,45 +137,35 @@ export const startImapPolling = async (accountId: string, intervalMin: number, r
                     triggerId: trigger.id,
                     status: 'ENQUEUED',
                     message: messageId || `Email UID: ${uid}`,
-                    context: emailData as any,
+                    context: emailData as unknown as Prisma.InputJsonValue,
                     source: 'NAVER_IMAP',
                     executionId: executionId,
                   },
                 });
-                
-                imap.addFlags(uid, ['Seen'], (err) => {
-                  if (err) console.error(`Error marking email ${uid} as seen:`, err);
-                });
+                imap.addFlags(uid, ['Seen'], () => {});
               });
             });
 
-            fetch.once('error', (err) => {
-              console.error(`Fetch error:`, err);
-              imap.end();
-            });
+            fetch.once('error', () => imap.end());
             fetch.once('end', () => imap.end());
           });
         });
       });
 
-      imap.once('error', (err) => {
+      imap.once('error', () => {
         imap.end();
         if (retryAttempt < maxRetries) {
           const delay = baseRetryDelayMs * Math.pow(2, retryAttempt);
           setTimeout(() => startImapPolling(accountId, intervalMin, retryAttempt + 1), delay);
-        } else {
-          stopImapPolling(accountId);
-        }
+        } else stopImapPolling(accountId);
       });
 
       imap.connect();
-    } catch (error) {
+    } catch {
       if (retryAttempt < maxRetries) {
         const delay = baseRetryDelayMs * Math.pow(2, retryAttempt);
         setTimeout(() => startImapPolling(accountId, intervalMin, retryAttempt + 1), delay);
-      } else {
-        stopImapPolling(accountId);
-      }
+      } else stopImapPolling(accountId);
     }
   };
 
@@ -207,14 +173,13 @@ export const startImapPolling = async (accountId: string, intervalMin: number, r
     poll();
     const intervalId = setInterval(poll, pollingInterval * 60 * 1000);
     pollingIntervals.set(accountId, intervalId);
-  } else {
-    poll();
-  }
+  } else poll();
 };
 
 export const stopImapPolling = (accountId: string) => {
-  if (pollingIntervals.has(accountId)) {
-    clearInterval(pollingIntervals.get(accountId)!);
+  const interval = pollingIntervals.get(accountId);
+  if (interval) {
+    clearInterval(interval);
     pollingIntervals.delete(accountId);
   }
 };

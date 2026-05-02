@@ -1,18 +1,25 @@
 // apps/api/src/executors/types.ts
+import { Prisma } from '@atomaton/db';
+
+/**
+ * Common data structure for any trigger or action output.
+ * Uses 'unknown' to enforce strict type checking and narrowing.
+ */
+export type WorkflowData = Record<string, unknown>;
 
 export interface WorkflowContext {
   triggerId: string;
   workflowId: string;
   executionId: string;
-  data: Record<string, string | number | boolean | null | any>; // Still need dynamic data but with stricter values
+  data: WorkflowData;
   results: Record<string, ActionResult>;
 }
 
 export interface ActionResult {
   success: boolean;
   message: string;
-  data?: Record<string, any>;
-  extractedVariables?: Record<string, any>;
+  data?: Record<string, unknown>;
+  extractedVariables?: WorkflowData;
   nextNodeId?: string;
 }
 
@@ -20,14 +27,15 @@ export interface LogEntry {
   workflowId: string;
   triggerId?: string;
   actionId?: string;
-  status: string; // 'SUCCESS' | 'FAILURE' etc
+  status: 'SUCCESS' | 'FAILURE' | 'SKIPPED' | 'ENQUEUED';
   message: string;
-  context: Record<string, any>;
+  context: Prisma.InputJsonValue;
   executionId: string;
+  source?: string;
   created_at?: Date | string;
 }
 
-// --- Config Interfaces ---
+// --- Configuration Types ---
 
 export interface DiscordActionConfig {
   webhookUrl: string;
@@ -38,7 +46,7 @@ export interface DiscordActionConfig {
 export interface NotionActionConfig {
   accountId: string;
   databaseId: string;
-  properties: Record<string, any>;
+  properties: Record<string, unknown>;
 }
 
 export interface ConditionRule {
@@ -65,7 +73,12 @@ export interface HttpActionConfig {
   responseMapping?: HttpResponseMapping[];
 }
 
-export type ActionConfig = DiscordActionConfig | NotionActionConfig | ConditionConfig | HttpActionConfig;
+export type ActionConfig = 
+  | DiscordActionConfig 
+  | NotionActionConfig 
+  | ConditionConfig 
+  | HttpActionConfig 
+  | Record<string, unknown>;
 
 export interface GlobalSettings {
   enableFailureAlert: boolean;

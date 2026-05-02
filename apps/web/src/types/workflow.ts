@@ -17,7 +17,9 @@ export interface ConditionRule {
 
 // --- Node Config Interfaces ---
 
-export interface BaseNodeConfig {}
+export interface BaseNodeConfig {
+  nodeId?: string; // Add a property to avoid empty interface lint error
+}
 
 export interface TriggerNodeConfig extends BaseNodeConfig {
   accountId?: string;

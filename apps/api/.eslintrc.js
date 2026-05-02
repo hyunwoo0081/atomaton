@@ -1,9 +1,8 @@
 module.exports = {
   root: true,
   env: {
-    browser: true,
-    es2021: true,
-    node: true
+    node: true,
+    es2021: true
   },
   extends: [
     "eslint:recommended",
@@ -20,11 +19,7 @@ module.exports = {
   ],
   rules: {
     "@typescript-eslint/no-explicit-any": "error",
-    "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }]
-  },
-  settings: {
-    next: {
-      rootDir: ["apps/*/", "packages/*/"],
-    },
-  },
+    "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+    "@typescript-eslint/no-unused-expressions": "off"
+  }
 };

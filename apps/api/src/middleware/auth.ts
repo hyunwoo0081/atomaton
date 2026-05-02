@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
+/* eslint-disable @typescript-eslint/no-namespace */
 declare global {
   namespace Express {
     interface Request {
@@ -26,7 +27,7 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
   jwt.verify(token, JWT_SECRET, (err, decoded) => {
     if (err || !decoded) return res.status(403).json({ message: 'Invalid or expired token' });
 
-    const user = decoded as JwtPayload;
+    const user = decoded as unknown as JwtPayload;
     req.userId = user.userId;
     req.isDeveloper = user.isDeveloper;
     next();

@@ -18,9 +18,17 @@ import type {
   XYPosition,
   ReactFlowInstance,
   OnConnectEnd,
+  OnConnectStartParams,
 } from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
-import { GlobalSettings, CustomNodeData, NodeConfig } from '../types/workflow';
+import { 
+    GlobalSettings, 
+    CustomNodeData, 
+    NodeConfig, 
+    ConditionNodeConfig, 
+    DiscordActionConfig, 
+    TriggerNodeConfig 
+} from '../types/workflow';
 
 interface WorkflowState {
   nodes: Node<CustomNodeData>[];
@@ -96,14 +104,21 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     set({ edges: addEdge(newEdge, get().edges), isDirty: true });
   },
 
-  onConnectEnd: (event: any, connectionState: any) => {
-    if (connectionState && !connectionState.isValid && connectionState.fromNode) {
+  onConnectEnd: (event: unknown, connectionState: OnConnectStartParams) => { 
+    // connectionState contains node and handle info where the connection attempt started/ended
+    if (connectionState && connectionState.nodeId) {
       let clientX = 0, clientY = 0;
-      if (event instanceof MouseEvent) { clientX = event.clientX; clientY = event.clientY; } 
-      else if (event.touches?.length > 0) { clientX = event.touches[0].clientX; clientY = event.touches[0].clientY; }
+      if (event instanceof MouseEvent) { 
+          clientX = event.clientX; clientY = event.clientY; 
+      } else if (event && typeof event === 'object' && 'touches' in event) {
+          const te = event as unknown as TouchEvent;
+          if (te.touches && te.touches.length > 0) {
+              clientX = te.touches[0].clientX; clientY = te.touches[0].clientY;
+          }
+      }
 
-      const sourceNodeId = connectionState.fromNode.id;
-      const sourceHandleId = connectionState.fromHandle?.id || null;
+      const sourceNodeId = connectionState.nodeId;
+      const sourceHandleId = connectionState.handleId || null;
       if (sourceNodeId) get().openModal({ x: clientX, y: clientY }, sourceNodeId, sourceHandleId);
     }
   },
@@ -145,12 +160,22 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   validateWorkflow: () => {
     const allValid = get().nodes.every((node) => {
-      const config = node.data.config as any;
+      const config = node.data.config;
       if (!config) return true;
+      
       switch (node.type) {
-        case 'trigger': return !!config.accountId;
-        case 'action': return !!config.webhookUrl && !!config.content;
-        case 'condition': return config.conditions?.every((c: any) => c.value);
+        case 'trigger': {
+            const trig = config as TriggerNodeConfig;
+            return !!trig.accountId;
+        }
+        case 'action': {
+          const discord = config as DiscordActionConfig;
+          return !!discord.webhookUrl && !!discord.content;
+        }
+        case 'condition': {
+          const cond = config as ConditionNodeConfig;
+          return !!cond.conditions && cond.conditions.every((c) => !!c.value);
+        }
         default: return true;
       }
     });

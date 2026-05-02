@@ -3,7 +3,15 @@ import { Button, Input } from '@atomaton/ui';
 import { api } from '../utils/api';
 import { useQuery } from '@tanstack/react-query';
 import { AccountConnectionModal } from './AccountConnectionModal';
-import type { NodeConfig, TriggerNodeConfig, DiscordActionConfig, NotionActionConfig, ConditionNodeConfig, ConditionRule } from '../types/workflow';
+import type { 
+  NodeConfig, 
+  TriggerNodeConfig, 
+  DiscordActionConfig, 
+  ConditionNodeConfig, 
+  ConditionRule,
+  AccountResponse,
+  HttpActionConfig
+} from '../types/workflow';
 
 interface ConfigPanelProps {
   nodeId: string;
@@ -13,13 +21,11 @@ interface ConfigPanelProps {
   onClose: () => void;
 }
 
-// --- Sub-components for specific settings ---
-
 const AccountSelect: React.FC<{ value: string; onChange: (val: string) => void }> = ({ value, onChange }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { data: accounts = [] } = useQuery({
+  const { data: accounts = [] } = useQuery<AccountResponse[]>({
     queryKey: ['accounts'],
-    queryFn: () => api.get<any[]>('/accounts'),
+    queryFn: () => api.get<AccountResponse[]>('/accounts'),
   });
 
   return (
@@ -120,14 +126,16 @@ const FilterRules: React.FC<{ rules: ConditionRule[]; onChange: (rules: Conditio
   );
 };
 
-// --- Main Component ---
-
 export const ConfigPanel: React.FC<ConfigPanelProps> = ({ nodeId, nodeType, initialConfig, onSave, onClose }) => {
-  const [config, setConfig] = useState<NodeConfig>(initialConfig || {});
+  const [config, setConfig] = useState<NodeConfig>(initialConfig || ({} as NodeConfig));
 
   useEffect(() => {
-    setConfig(initialConfig || {});
-  }, [initialConfig, nodeId]);
+    // Only update if the config or node really changed
+    if (JSON.stringify(initialConfig) !== JSON.stringify(config)) {
+        setConfig(initialConfig || ({} as NodeConfig));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeId, initialConfig]);
 
   const handleChange = (key: string, value: string | number | boolean | object | ConditionRule[]) => {
     setConfig((prev: NodeConfig) => ({ ...prev, [key]: value }));
@@ -147,7 +155,6 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ nodeId, nodeType, init
       </div>
 
       <div className="flex-1 space-y-8">
-        {/* IMAP Trigger */}
         {(nodeType === 'trigger' || nodeType === 'trigger-webhook') && (
           <>
             <h3 className="font-bold text-lg text-[#8A3FFC] border-b border-white/10 pb-2">
@@ -165,21 +172,14 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ nodeId, nodeType, init
                   label="Polling Interval (min)"
                   type="number"
                   value={(config as TriggerNodeConfig).interval || 30}
-                  onChange={(e) => handleChange('interval', parseInt(e.target.value))}
+                  onChange={(e) => handleChange('interval', parseInt(e.target.value, 10))}
                 />
                 <FilterRules rules={(config as TriggerNodeConfig).rules || []} onChange={(rules) => handleChange('rules', rules)} />
               </>
             )}
-            {nodeType === 'trigger-webhook' && (
-              <div className="bg-white/5 border border-white/10 p-4 rounded-xl text-sm break-all">
-                <div className="font-bold mb-2 text-white/80">Webhook URL:</div>
-                <div className="text-[#00F5A0] font-mono">https://api.atomaton.com/webhook/...</div>
-              </div>
-            )}
           </>
         )}
 
-        {/* Condition Logic */}
         {nodeType === 'condition' && (
           <>
             <h3 className="font-bold text-lg text-[#E02DFF] border-b border-white/10 pb-2">Condition (If/Else)</h3>
@@ -198,7 +198,28 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ nodeId, nodeType, init
           </>
         )}
 
-        {/* Discord Action */}
+        {nodeType === 'action-http' && (
+          <>
+            <h3 className="font-bold text-lg text-[#00F5A0] border-b border-white/10 pb-2">HTTP Request</h3>
+            <div className="flex flex-col mb-4">
+              <label className="mb-2 text-sm font-medium text-white/80">Method</label>
+              <select
+                className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#00F5A0]"
+                value={(config as HttpActionConfig).method || 'GET'}
+                onChange={(e) => handleChange('method', e.target.value)}
+              >
+                {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(m => <option key={m} value={m} className="bg-[#0D0E12]">{m}</option>)}
+              </select>
+            </div>
+            <Input
+              label="URL"
+              value={(config as HttpActionConfig).url || ''}
+              onChange={(e) => handleChange('url', e.target.value)}
+              placeholder="https://api.example.com/..."
+            />
+          </>
+        )}
+
         {nodeType === 'action' && (
           <>
             <h3 className="font-bold text-lg text-[#00F5A0] border-b border-white/10 pb-2">Discord Webhook</h3>
@@ -207,11 +228,6 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ nodeId, nodeType, init
               value={(config as DiscordActionConfig).webhookUrl || ''}
               onChange={(e) => handleChange('webhookUrl', e.target.value)}
               placeholder="https://discord.com/api/webhooks/..."
-            />
-            <Input
-              label="Bot Name (Optional)"
-              value={(config as DiscordActionConfig).username || ''}
-              onChange={(e) => handleChange('username', e.target.value)}
             />
             <div className="flex flex-col mb-4">
               <label className="mb-2 text-sm font-medium text-white/80">Message Content</label>
@@ -222,33 +238,6 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({ nodeId, nodeType, init
                 placeholder="Hello {{subject}}!"
               />
               <VariablePicker onSelect={(v) => handleChange('content', ((config as DiscordActionConfig).content || '') + v)} />
-            </div>
-          </>
-        )}
-
-        {/* Notion Action */}
-        {nodeType === 'action-notion' && (
-          <>
-            <h3 className="font-bold text-lg text-[#00F5A0] border-b border-white/10 pb-2">Notion Page</h3>
-            <AccountSelect value={(config as NotionActionConfig).accountId || ''} onChange={(val) => handleChange('accountId', val)} />
-            <Input
-              label="Database ID"
-              value={(config as NotionActionConfig).databaseId || ''}
-              onChange={(e) => handleChange('databaseId', e.target.value)}
-            />
-            <div className="flex flex-col mb-4">
-              <label className="mb-2 text-sm font-medium text-white/80">Properties (JSON)</label>
-              <textarea
-                className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-[#00F5A0] focus:border-transparent h-48 font-mono text-xs transition-all duration-200"
-                value={
-                  typeof (config as NotionActionConfig).properties === 'string'
-                    ? (config as NotionActionConfig).properties as string
-                    : JSON.stringify((config as NotionActionConfig).properties || {}, null, 2)
-                }
-                onChange={(e) => handleChange('properties', e.target.value)}
-                placeholder='{ "Name": { "title": [ { "text": { "content": "{{subject}}" } } ] } }'
-              />
-              <VariablePicker onSelect={(v) => handleChange('properties', ((config as NotionActionConfig).properties || '') + v)} />
             </div>
           </>
         )}

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import prisma from '@atomaton/db';
+import prisma, { Prisma } from '@atomaton/db';
 import { encrypt } from '@atomaton/db/crypto';
 import { startImapPolling, stopImapPolling } from '../services/imapPolling';
 
@@ -31,7 +31,7 @@ export const createAccount = async (req: Request, res: Response) => {
       data: {
         userId,
         type,
-        credentials: config as any, // Prisma requires Json, but we've typed the input
+        credentials: config as unknown as Prisma.InputJsonValue,
       },
     });
     res.status(201).json(account);
@@ -43,16 +43,10 @@ export const createAccount = async (req: Request, res: Response) => {
 
 export const getAccounts = async (req: Request, res: Response) => {
   const userId = req.userId;
-
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
   try {
-    const accounts = await prisma.account.findMany({
-      where: { userId },
-    });
-    
+    const accounts = await prisma.account.findMany({ where: { userId } });
     const safeAccounts = accounts.map(account => {
       const credentials = account.credentials as unknown as ImapCredentials;
       if (account.type === 'NAVER_IMAP' && credentials.password) {
@@ -60,7 +54,6 @@ export const getAccounts = async (req: Request, res: Response) => {
       }
       return { ...account, credentials };
     });
-    
     res.status(200).json(safeAccounts);
   } catch (error: unknown) {
     console.error('Error fetching accounts:', error);
@@ -71,25 +64,16 @@ export const getAccounts = async (req: Request, res: Response) => {
 export const getAccountById = async (req: Request, res: Response) => {
   const { id } = req.params;
   const userId = req.userId;
-
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
   try {
-    const account = await prisma.account.findUnique({
-      where: { id, userId },
-    });
-
-    if (!account) {
-      return res.status(404).json({ message: 'Account not found' });
-    }
+    const account = await prisma.account.findUnique({ where: { id, userId } });
+    if (!account) return res.status(404).json({ message: 'Account not found' });
 
     const credentials = account.credentials as unknown as ImapCredentials;
     if (account.type === 'NAVER_IMAP' && credentials.password) {
       credentials.password = 'ENCRYPTED';
     }
-
     res.status(200).json({ ...account, credentials });
   } catch (error: unknown) {
     console.error('Error fetching account:', error);
@@ -101,10 +85,7 @@ export const updateAccount = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { type, config } = req.body as { type?: string; config?: ImapCredentials };
   const userId = req.userId;
-
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
   if (type === 'NAVER_IMAP' && config && config.password) {
     config.password = encrypt(config.password);
@@ -113,17 +94,13 @@ export const updateAccount = async (req: Request, res: Response) => {
   try {
     const account = await prisma.account.update({
       where: { id, userId },
-      data: { 
-          type, 
-          credentials: config as any 
-      },
+      data: { type, credentials: config as unknown as Prisma.InputJsonValue },
     });
 
     if (account.type === 'NAVER_IMAP' && config && config.pollingIntervalMin) {
       stopImapPolling(account.id);
       startImapPolling(account.id, config.pollingIntervalMin);
     }
-
     res.status(200).json(account);
   } catch (error: unknown) {
     console.error('Error updating account:', error);
@@ -134,15 +111,10 @@ export const updateAccount = async (req: Request, res: Response) => {
 export const deleteAccount = async (req: Request, res: Response) => {
   const { id } = req.params;
   const userId = req.userId;
-
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
   try {
-    await prisma.account.delete({
-      where: { id, userId },
-    });
+    await prisma.account.delete({ where: { id, userId } });
     stopImapPolling(id);
     res.status(204).send();
   } catch (error: unknown) {

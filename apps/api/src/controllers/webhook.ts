@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import prisma from '@atomaton/db';
+import prisma, { Prisma } from '@atomaton/db';
 import { enqueue } from '../executors/queue';
 import { WorkflowContext } from '../executors/types';
 import { v4 as uuidv4 } from 'uuid';
@@ -43,7 +43,7 @@ export const processWebhook = async (req: Request, res: Response) => {
       triggerId: trigger.id,
       workflowId: trigger.workflowId,
       executionId: executionId,
-      data: body as Record<string, any>,
+      data: body as Record<string, unknown>,
       results: {},
     };
 
@@ -55,7 +55,7 @@ export const processWebhook = async (req: Request, res: Response) => {
         triggerId: trigger.id,
         status: 'ENQUEUED',
         message: `Webhook received for trigger ${triggerId}`,
-        context: body as any,
+        context: body as unknown as Prisma.InputJsonValue,
         source: 'WEBHOOK',
         executionId: executionId,
       },
