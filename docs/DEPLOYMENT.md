@@ -139,7 +139,37 @@ Configure Nginx to serve the frontend static files and proxy API requests to the
    sudo systemctl restart nginx
    ```
 
-## 6. Verification
+## 6. Automated Deployment (CI/CD)
+
+Atomaton uses GitHub Actions for Continuous Delivery. The workflow is defined in `.github/workflows/cd.yml`.
+
+### 6.1. GitHub Environments Setup
+
+Create two environments in your GitHub repository:
+1.  `production-frontend`
+2.  `production-backend`
+
+### 6.2. Required Secrets
+
+Configure the following secrets in your GitHub repository:
+
+**Repository Secrets (Actions > Secrets and variables > Actions):**
+- `SSH_HOST`: Server IP or domain.
+- `SSH_USER`: SSH username (e.g., `ubuntu`).
+- `SSH_PRIVATE_KEY`: Private SSH key for server access.
+
+**Environment Secrets (production-frontend):**
+- `PWD`: The absolute path on the server where frontend static files should be deployed (e.g., `/var/www/atomaton/apps/web/dist`).
+
+**Environment Secrets (production-backend):**
+- `PWD`: The absolute path on the server where the backend repository resides (e.g., `/var/www/atomaton`).
+
+### 6.3. Workflow Overview
+
+- **Frontend**: Built in CI, then `rsync`ed to the server's Nginx root.
+- **Backend**: Repository files (excluding unnecessary ones) are `rsync`ed to the server. CI then triggers `pnpm install --prod`, `prisma migrate deploy`, and `pm2 restart` on the server.
+
+## 7. Verification
 
 - Access `http://yourdomain.com` to see the frontend.
 - Try logging in to verify API connectivity.
