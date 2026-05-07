@@ -83,21 +83,31 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: DATABASE_URL
           script: |
-            # Ensure bin paths are in PATH
+            # Start as login shell to load profiles
+            set -e
+            
+            # Additional PATH security
             export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/home/${{ secrets.SSH_USER }}/.pnpm-global/bin:/home/${{ secrets.SSH_USER }}/.npm-global/bin
+            
+            # Find pnpm and pm2
+            PNPM_BIN=$(command -v pnpm || echo "/home/${{ secrets.SSH_USER }}/.local/share/pnpm/pnpm")
+            PM2_BIN=$(command -v pm2 || echo "pm2")
+            
+            echo "Using pnpm at: $PNPM_BIN"
+            echo "Using pm2 at: $PM2_BIN"
             
             cd ${{ secrets.PWD }}
             
             # Install production dependencies
-            pnpm install --prod --frozen-lockfile
+            $PNPM_BIN install --prod --frozen-lockfile
             
             # Generate Prisma Client
-            pnpm --filter @atomaton/db exec prisma generate
+            $PNPM_BIN --filter @atomaton/db exec prisma generate
             
             # Run database migrations
-            pnpm --filter @atomaton/db exec prisma migrate deploy
+            $PNPM_BIN --filter @atomaton/db exec prisma migrate deploy
             
             # Restart PM2 process
-            pm2 restart atomaton-api || pm2 start apps/api/dist/index.js --name "atomaton-api"
+            $PM2_BIN restart atomaton-api || $PM2_BIN start apps/api/dist/index.js --name "atomaton-api"
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
