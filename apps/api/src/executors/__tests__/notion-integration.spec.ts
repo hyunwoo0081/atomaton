@@ -120,7 +120,7 @@ describe('Notion Integration (Email -> Notion)', () => {
 
     // Mock Notion failure
     const notionError = new Error('Internal Server Error')
-    ;(notionError as Record<string, unknown>).status = 500
+    ;(notionError as unknown as Record<string, unknown>).status = 500
     createMock.mockRejectedValue(notionError)
 
     const context: WorkflowContext = {
