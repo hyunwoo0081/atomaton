@@ -40,3 +40,6 @@ apps/api/.env
 .env.development.local
 .env.test.local
 .env.production.local
+
+# ignore docs
+/docs/ignores
