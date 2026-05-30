@@ -1,26 +1,29 @@
-import React, { useState } from 'react';
-import { Button } from '@atomaton/ui';
-import { useWorkflowStore } from '../store/workflowStore';
-import { GlobalSettingsModal } from './GlobalSettingsModal';
+import React, { useState } from 'react'
+import { Button } from '@atomaton/ui'
+import { GlobalSettingsModal } from './GlobalSettingsModal'
 
-export const Sidebar: React.FC<{ onSave: () => void; onTest: () => void }> = ({ onSave, onTest }) => {
-  const isValid = useWorkflowStore((state) => state.isValid);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+export const Sidebar: React.FC<{ onSave: () => void; onTest: () => void }> = ({
+  onSave,
+  onTest,
+}) => {
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
-    event.dataTransfer.setData('application/reactflow', nodeType);
-    event.dataTransfer.effectAllowed = 'move';
-  };
+    event.dataTransfer.setData('application/reactflow', nodeType)
+    event.dataTransfer.effectAllowed = 'move'
+  }
 
   return (
     <aside className="w-64 bg-white/5 backdrop-blur-xl border-r border-white/10 p-4 flex flex-col gap-4 z-20">
       <div className="text-lg font-bold text-white mb-2">Workflow</div>
       <div className="space-y-2">
-        <Button variant="secondary" onClick={onSave} disabled={!isValid} className="w-full">
+        <Button variant="secondary" onClick={onSave} className="w-full">
           Save
         </Button>
-        <Button onClick={onTest} className="w-full">Run Test</Button>
-        <button 
+        <Button onClick={onTest} className="w-full">
+          Run Test
+        </Button>
+        <button
           onClick={() => setIsSettingsOpen(true)}
           className="w-full py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded border border-white/20 transition-colors"
         >
@@ -31,9 +34,11 @@ export const Sidebar: React.FC<{ onSave: () => void; onTest: () => void }> = ({ 
       <hr className="my-4 border-white/10" />
 
       <div className="text-sm font-bold text-white/50 uppercase">Toolbox</div>
-      
+
       <div>
-        <div className="text-xs font-semibold text-[#8A3FFC] mb-2">Triggers</div>
+        <div className="text-xs font-semibold text-[#8A3FFC] mb-2">
+          Triggers
+        </div>
         <div
           className="p-3 bg-white/5 border border-white/10 rounded-xl cursor-grab mb-2 hover:bg-white/10 hover:border-[#8A3FFC]/50 transition-all text-white text-sm"
           onDragStart={(event) => onDragStart(event, 'trigger')}
@@ -79,7 +84,10 @@ export const Sidebar: React.FC<{ onSave: () => void; onTest: () => void }> = ({ 
         </div>
       </div>
 
-      <GlobalSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <GlobalSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
     </aside>
-  );
-};
+  )
+}

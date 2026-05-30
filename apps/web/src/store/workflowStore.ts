@@ -28,6 +28,9 @@ import {
   ConditionNodeConfig,
   DiscordActionConfig,
   TriggerNodeConfig,
+  WebhookTriggerNodeConfig,
+  NotionActionConfig,
+  HttpActionConfig,
 } from '../types/workflow'
 
 interface WorkflowState {
@@ -85,6 +88,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   onNodesChange: (changes: NodeChange[]) => {
     set({ nodes: applyNodeChanges(changes, get().nodes), isDirty: true })
+    get().validateWorkflow()
   },
 
   onEdgesChange: (changes: EdgeChange[]) => {
@@ -164,6 +168,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       selectedNodeId: selectedNodeId === id ? null : selectedNodeId,
       isDirty: true,
     })
+    get().validateWorkflow()
   },
 
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
@@ -178,33 +183,87 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     get().validateWorkflow()
   },
 
-  setNodes: (nodes) => set({ nodes }),
+  setNodes: (nodes) => {
+    set({ nodes })
+    get().validateWorkflow()
+  },
   setEdges: (edges) => set({ edges }),
 
   validateWorkflow: () => {
     const { nodes } = get()
-    const allValid = nodes.every((node) => {
+    let allValid = true
+    let hasChanges = false
+    const updatedNodes = nodes.map((node) => {
       const config = node.data.config
-      if (!config) return true
+      let nodeValid: boolean
 
-      switch (node.type) {
-        case 'trigger': {
-          const trig = config as TriggerNodeConfig
-          return !!trig.accountId
+      if (!config) {
+        nodeValid = false
+      } else {
+        switch (node.type) {
+          case 'trigger': {
+            const trig = config as TriggerNodeConfig
+            nodeValid = !!trig.accountId
+            break
+          }
+          case 'trigger-webhook': {
+            const trig = config as WebhookTriggerNodeConfig
+            nodeValid = !!trig.apiKey
+            break
+          }
+          case 'action': {
+            const discord = config as DiscordActionConfig
+            nodeValid = !!discord.webhookUrl && !!discord.content
+            break
+          }
+          case 'action-notion': {
+            const notion = config as NotionActionConfig
+            nodeValid = !!notion.accountId && !!notion.databaseId
+            break
+          }
+          case 'action-http': {
+            const http = config as HttpActionConfig
+            nodeValid = !!http.url
+            break
+          }
+          case 'condition': {
+            const cond = config as ConditionNodeConfig
+            nodeValid =
+              !!cond.conditions &&
+              cond.conditions.length > 0 &&
+              cond.conditions.every((c) => !!c.value)
+            break
+          }
+          default:
+            nodeValid = true
+            break
         }
-        case 'action': {
-          const discord = config as DiscordActionConfig
-          return !!discord.webhookUrl && !!discord.content
-        }
-        case 'condition': {
-          const cond = config as ConditionNodeConfig
-          return !!cond.conditions && cond.conditions.every((c) => !!c.value)
-        }
-        default:
-          return true
       }
+
+      if (!nodeValid) {
+        allValid = false
+      }
+
+      if (node.data.isValid !== nodeValid) {
+        hasChanges = true
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            isValid: nodeValid,
+          },
+        }
+      }
+      return node
     })
-    set({ isValid: allValid })
+
+    const currentIsValid = get().isValid
+    if (hasChanges || currentIsValid !== allValid) {
+      set({
+        nodes: hasChanges ? updatedNodes : nodes,
+        isValid: allValid,
+      })
+    }
   },
 
   updateGlobalSettings: (settings) =>
@@ -234,11 +293,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         if (sourceHandleId === 'false') position.x += 100
       }
     }
+    const config = {} as NodeConfig
+    if (type === 'trigger-webhook') {
+      ;(config as WebhookTriggerNodeConfig).apiKey =
+        'at_' + uuidv4().replace(/-/g, '')
+    }
     const newNode: Node<CustomNodeData> = {
       id: newNodeId,
       type,
       position,
-      data: { label: type, config: {} as NodeConfig, isValid: false },
+      data: { label: type, config, isValid: type === 'trigger-webhook' },
     }
     set({ nodes: [...nodes, newNode], isModalOpen: false })
     if (sourceNodeId)
@@ -249,5 +313,6 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         targetHandle: null,
       })
     set({ sourceNodeId: null, sourceHandleId: null })
+    get().validateWorkflow()
   },
 }))

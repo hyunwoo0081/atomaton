@@ -11,6 +11,7 @@ import type {
   ConditionRule,
   AccountResponse,
   HttpActionConfig,
+  WebhookTriggerNodeConfig,
 } from '../types/workflow'
 
 interface ConfigPanelProps {
@@ -19,6 +20,8 @@ interface ConfigPanelProps {
   initialConfig: NodeConfig
   onSave: (config: NodeConfig) => void
   onClose: () => void
+  userId?: string
+  triggerId?: string
 }
 
 const AccountSelect: React.FC<{
@@ -165,6 +168,8 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
   initialConfig,
   onSave,
   onClose,
+  userId,
+  triggerId,
 }) => {
   const [config, setConfig] = useState<NodeConfig>(
     initialConfig || ({} as NodeConfig)
@@ -233,6 +238,88 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
                   onChange={(rules) => handleChange('rules', rules)}
                 />
               </>
+            )}
+            {nodeType === 'trigger-webhook' && (
+              <div className="space-y-4">
+                <div className="flex flex-col">
+                  <label className="mb-2 text-sm font-medium text-white/80">
+                    Webhook URL
+                  </label>
+                  {triggerId && userId ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-mono focus:outline-none"
+                        value={`${window.location.origin}/api/webhook/${userId}/${triggerId}`}
+                      />
+                      <Button
+                        variant="secondary"
+                        type="button"
+                        className="!px-3 !py-1 text-xs"
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            `${window.location.origin}/api/webhook/${userId}/${triggerId}`
+                          )
+                          alert('Webhook URL copied!')
+                        }}
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-white/50 italic">
+                      Save the workflow to generate your webhook URL.
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-col">
+                  <label className="mb-2 text-sm font-medium text-white/80">
+                    API Key
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-mono focus:outline-none"
+                      value={(config as WebhookTriggerNodeConfig).apiKey || ''}
+                    />
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      className="!px-3 !py-1 text-xs"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          (config as WebhookTriggerNodeConfig).apiKey || ''
+                        )
+                        alert('API Key copied!')
+                      }}
+                    >
+                      Copy
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      className="!px-3 !py-1 text-xs"
+                      onClick={() => {
+                        const newKey =
+                          'at_' +
+                          Math.random().toString(36).substring(2, 15) +
+                          Math.random().toString(36).substring(2, 15)
+                        handleChange('apiKey', newKey)
+                      }}
+                    >
+                      Regen
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-xs text-white/50">
+                    Include this key in the Authorization header: <br />
+                    <code className="text-[#00F5A0] font-mono">
+                      Bearer &lt;API_KEY&gt;
+                    </code>
+                  </p>
+                </div>
+              </div>
             )}
           </>
         )}

@@ -29,6 +29,12 @@ import type {
   NodeConfig,
   GlobalSettings,
   TestResult,
+  TriggerNodeConfig,
+  WebhookTriggerNodeConfig,
+  DiscordActionConfig,
+  NotionActionConfig,
+  HttpActionConfig,
+  ConditionNodeConfig,
 } from '../types/workflow'
 
 const WorkflowEditorContent: React.FC = () => {
@@ -52,7 +58,6 @@ const WorkflowEditorContent: React.FC = () => {
     selectedNodeId,
     setSelectedNodeId,
     updateNodeData,
-    validateWorkflow,
     isModalOpen,
     modalPosition,
     closeModal,
@@ -93,11 +98,6 @@ const WorkflowEditorContent: React.FC = () => {
       }
     }
   }, [workflow, setNodes, setEdges, updateGlobalSettings])
-
-  useEffect(() => {
-    validateWorkflow()
-  }, [nodes, validateWorkflow])
-
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
       setSelectedNodeId(node.id)
@@ -148,6 +148,105 @@ const WorkflowEditorContent: React.FC = () => {
 
   const handleSaveWorkflow = async () => {
     if (!id) return
+
+    const errors: string[] = []
+    let firstInvalidNodeId: string | null = null
+
+    nodes.forEach((node) => {
+      const config = node.data.config
+      const label = node.data.label || node.type || 'Node'
+      let isNodeValid = true
+      const missingFields: string[] = []
+
+      if (!config) {
+        isNodeValid = false
+        missingFields.push('Configuration')
+      } else {
+        switch (node.type) {
+          case 'trigger': {
+            if (!(config as TriggerNodeConfig).accountId) {
+              isNodeValid = false
+              missingFields.push('Account')
+            }
+            break
+          }
+          case 'trigger-webhook': {
+            if (!(config as WebhookTriggerNodeConfig).apiKey) {
+              isNodeValid = false
+              missingFields.push('API Key')
+            }
+            break
+          }
+          case 'action': {
+            const discord = config as DiscordActionConfig
+            if (!discord.webhookUrl) missingFields.push('Webhook URL')
+            if (!discord.content) missingFields.push('Message Content')
+            if (missingFields.length > 0) isNodeValid = false
+            break
+          }
+          case 'action-notion': {
+            const notion = config as NotionActionConfig
+            if (!notion.accountId) missingFields.push('Account')
+            if (!notion.databaseId) missingFields.push('Database ID')
+            if (missingFields.length > 0) isNodeValid = false
+            break
+          }
+          case 'action-http': {
+            const http = config as HttpActionConfig
+            if (!http.url) {
+              isNodeValid = false
+              missingFields.push('URL')
+            }
+            break
+          }
+          case 'condition': {
+            const cond = config as ConditionNodeConfig
+            if (!cond.conditions || cond.conditions.length === 0) {
+              isNodeValid = false
+              missingFields.push('At least one condition rule')
+            } else if (cond.conditions.some((c) => !c.value)) {
+              isNodeValid = false
+              missingFields.push('All condition values')
+            }
+            break
+          }
+          default:
+            break
+        }
+      }
+
+      if (!isNodeValid) {
+        if (!firstInvalidNodeId) {
+          firstInvalidNodeId = node.id
+        }
+        const friendlyName =
+          node.type === 'trigger'
+            ? 'IMAP Email Trigger'
+            : node.type === 'trigger-webhook'
+              ? 'Incoming Webhook Trigger'
+              : node.type === 'action'
+                ? 'Discord Webhook Action'
+                : node.type === 'action-notion'
+                  ? 'Notion Page Action'
+                  : node.type === 'action-http'
+                    ? 'HTTP Request Action'
+                    : node.type === 'condition'
+                      ? 'Condition Node'
+                      : label
+        errors.push(`• [${friendlyName}] Missing: ${missingFields.join(', ')}`)
+      }
+    })
+
+    if (errors.length > 0) {
+      alert(
+        `Cannot save workflow. Please resolve the following validation errors:\n\n${errors.join('\n')}`
+      )
+      if (firstInvalidNodeId) {
+        setSelectedNodeId(firstInvalidNodeId)
+      }
+      return
+    }
+
     saveWorkflowMutation.mutate({ nodes, edges, globalSettings })
   }
 
@@ -156,12 +255,11 @@ const WorkflowEditorContent: React.FC = () => {
   ): Promise<TestResult> => {
     if (!id) throw new Error('Workflow ID is missing for test run.')
     try {
-      const response = await api.post<TestResult>(`/workflows/${id}/test`, {
+      return api.post<TestResult>(`/workflows/${id}/test`, {
         nodes,
         edges,
         inputData,
       })
-      return response
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Test run failed'
       console.error('Test run failed:', error)
@@ -237,6 +335,8 @@ const WorkflowEditorContent: React.FC = () => {
           initialConfig={selectedNode.data.config}
           onSave={handleConfigSave}
           onClose={() => setSelectedNodeId(null)}
+          userId={workflow?.userId}
+          triggerId={workflow?.trigger?.id}
         />
       )}
 
