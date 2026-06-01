@@ -28,17 +28,22 @@ const getErrorMessage = (error: unknown): string => {
 }
 
 export const applyTemplate = (template: string, data: WorkflowData): string => {
-  let result = template
-  for (const key in data) {
-    const value = data[key]
-    if (typeof value !== 'object') {
-      result = result.replace(
-        new RegExp(`\\{\\{${key}\\}\\}`, 'g'),
-        value !== null && value !== undefined ? String(value) : ''
-      )
+  if (!template) return ''
+  return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
+    const trimmedPath = path.trim()
+    const value = resolvePath(data as Record<string, unknown>, trimmedPath)
+    if (value === null || value === undefined) {
+      return match
     }
-  }
-  return result
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value)
+      } catch {
+        return match
+      }
+    }
+    return String(value)
+  })
 }
 
 export const resolvePath = (

@@ -23,6 +23,7 @@ interface ConfigPanelProps {
   userId?: string
   triggerId?: string
   onSaveWorkflow?: () => void
+  triggerType?: string
 }
 
 const AccountSelect: React.FC<{
@@ -69,21 +70,31 @@ const AccountSelect: React.FC<{
   )
 }
 
-const VariablePicker: React.FC<{ onSelect: (variable: string) => void }> = ({
-  onSelect,
-}) => {
-  const variables = ['{{subject}}', '{{from}}', '{{date}}', '{{body}}']
+const VariablePicker: React.FC<{
+  triggerType?: string
+  onSelect: (variable: string) => void
+}> = ({ triggerType, onSelect }) => {
+  const variables =
+    triggerType === 'trigger-webhook'
+      ? ['{{subject}}', '{{amount}}', '{{status}}']
+      : ['{{subject}}', '{{from}}', '{{date}}', '{{body}}']
   return (
-    <div className="flex flex-wrap gap-2 mt-3">
-      {variables.map((v) => (
-        <button
-          key={v}
-          className="px-3 py-1 text-xs bg-white/10 hover:bg-white/20 rounded-full border border-white/10 text-white/80 transition-all"
-          onClick={() => onSelect(v)}
-        >
-          {v}
-        </button>
-      ))}
+    <div className="flex flex-col gap-1 mt-3">
+      <span className="text-[10px] text-white/40">
+        Suggested variables from Trigger:
+      </span>
+      <div className="flex flex-wrap gap-2 mt-1">
+        {variables.map((v) => (
+          <button
+            key={v}
+            type="button"
+            className="px-3 py-1 text-xs bg-white/10 hover:bg-white/20 rounded-full border border-white/10 text-white/80 transition-all font-mono"
+            onClick={() => onSelect(v)}
+          >
+            {v}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -172,6 +183,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
   userId,
   triggerId,
   onSaveWorkflow,
+  triggerType,
 }) => {
   const [config, setConfig] = useState<NodeConfig>(
     initialConfig || ({} as NodeConfig)
@@ -469,6 +481,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 placeholder="Hello {{subject}}!"
               />
               <VariablePicker
+                triggerType={triggerType}
                 onSelect={(v) =>
                   handleChange(
                     'content',
