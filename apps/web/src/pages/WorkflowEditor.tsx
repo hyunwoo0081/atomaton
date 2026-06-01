@@ -337,6 +337,7 @@ const WorkflowEditorContent: React.FC = () => {
           onClose={() => setSelectedNodeId(null)}
           userId={workflow?.userId}
           triggerId={workflow?.trigger?.id}
+          onSaveWorkflow={handleSaveWorkflow}
         />
       )}
 

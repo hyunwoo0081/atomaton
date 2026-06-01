@@ -22,6 +22,7 @@ interface ConfigPanelProps {
   onClose: () => void
   userId?: string
   triggerId?: string
+  onSaveWorkflow?: () => void
 }
 
 const AccountSelect: React.FC<{
@@ -170,6 +171,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
   onClose,
   userId,
   triggerId,
+  onSaveWorkflow,
 }) => {
   const [config, setConfig] = useState<NodeConfig>(
     initialConfig || ({} as NodeConfig)
@@ -268,57 +270,119 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
                       </Button>
                     </div>
                   ) : (
-                    <p className="text-xs text-white/50 italic">
-                      Save the workflow to generate your webhook URL.
-                    </p>
+                    <div className="p-4 bg-white/[0.02] border border-white/10 rounded-2xl text-center space-y-3">
+                      <div className="text-amber-400 text-lg">⚠️</div>
+                      <p className="text-xs text-white/60">
+                        Webhook URL is not generated yet. You must save the
+                        workflow to register the trigger in the system.
+                      </p>
+                      <Button
+                        variant="primary"
+                        type="button"
+                        className="w-full text-xs bg-gradient-to-r from-[#8A3FFC] to-[#E02DFF] text-white"
+                        onClick={() => {
+                          // First save node config locally
+                          onSave(config)
+                          // Then call the global save workflow operation
+                          if (onSaveWorkflow) {
+                            onSaveWorkflow()
+                          }
+                        }}
+                      >
+                        Save & Generate Webhook
+                      </Button>
+                    </div>
                   )}
                 </div>
-                <div className="flex flex-col">
-                  <label className="mb-2 text-sm font-medium text-white/80">
-                    API Key
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-mono focus:outline-none"
-                      value={(config as WebhookTriggerNodeConfig).apiKey || ''}
-                    />
-                    <Button
-                      variant="secondary"
-                      type="button"
-                      className="!px-3 !py-1 text-xs"
-                      onClick={() => {
-                        navigator.clipboard.writeText(
-                          (config as WebhookTriggerNodeConfig).apiKey || ''
-                        )
-                        alert('API Key copied!')
-                      }}
-                    >
-                      Copy
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      type="button"
-                      className="!px-3 !py-1 text-xs"
-                      onClick={() => {
-                        const newKey =
-                          'at_' +
-                          Math.random().toString(36).substring(2, 15) +
-                          Math.random().toString(36).substring(2, 15)
-                        handleChange('apiKey', newKey)
-                      }}
-                    >
-                      Regen
-                    </Button>
-                  </div>
-                  <p className="mt-2 text-xs text-white/50">
-                    Include this key in the Authorization header: <br />
-                    <code className="text-[#00F5A0] font-mono">
-                      Bearer &lt;API_KEY&gt;
-                    </code>
-                  </p>
-                </div>
+                {triggerId && userId && (
+                  <>
+                    <div className="flex flex-col">
+                      <label className="mb-2 text-sm font-medium text-white/80">
+                        API Key
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-mono focus:outline-none"
+                          value={
+                            (config as WebhookTriggerNodeConfig).apiKey || ''
+                          }
+                        />
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          className="!px-3 !py-1 text-xs"
+                          onClick={() => {
+                            navigator.clipboard.writeText(
+                              (config as WebhookTriggerNodeConfig).apiKey || ''
+                            )
+                            alert('API Key copied!')
+                          }}
+                        >
+                          Copy
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          className="!px-3 !py-1 text-xs"
+                          onClick={() => {
+                            const newKey =
+                              'at_' +
+                              Math.random().toString(36).substring(2, 15) +
+                              Math.random().toString(36).substring(2, 15)
+                            handleChange('apiKey', newKey)
+                          }}
+                        >
+                          Regen
+                        </Button>
+                      </div>
+                      <p className="mt-2 text-xs text-white/50">
+                        Include this key in the Authorization header: <br />
+                        <code className="text-[#00F5A0] font-mono">
+                          Bearer &lt;API_KEY&gt;
+                        </code>
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col mt-4 pt-4 border-t border-white/10">
+                      <label className="mb-2 text-sm font-medium text-white/80">
+                        Sample Request (cURL)
+                      </label>
+                      <div className="relative">
+                        <pre className="p-3 bg-[#0D0E12]/80 border border-[#0D0E12] rounded-xl text-[10px] text-[#00F5A0] font-mono overflow-x-auto whitespace-pre-wrap break-all leading-normal pr-12">
+                          {`curl -X POST "${window.location.origin}/api/webhook/${userId}/${triggerId}" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${(config as WebhookTriggerNodeConfig).apiKey || '<API_KEY>'}" \\
+  -d '{
+    "subject": "Test Webhook",
+    "amount": 25000,
+    "status": "pending"
+  }'`}
+                        </pre>
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          className="absolute right-2 top-2 !px-2 !py-0.5 text-[9px]"
+                          onClick={() => {
+                            const curlText = `curl -X POST "${window.location.origin}/api/webhook/${userId}/${triggerId}" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${(config as WebhookTriggerNodeConfig).apiKey || '<API_KEY>'}" \\
+  -d '{
+    "subject": "Test Webhook",
+    "amount": 25000,
+    "status": "pending"
+  }'`
+                            navigator.clipboard.writeText(curlText)
+                            alert('Sample cURL copied!')
+                          }}
+                        >
+                          Copy
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </>
