@@ -24,6 +24,7 @@ interface ConfigPanelProps {
   triggerId?: string
   onSaveWorkflow?: () => void
   triggerType?: string
+  triggerConfig?: NodeConfig
 }
 
 const AccountSelect: React.FC<{
@@ -70,19 +71,82 @@ const AccountSelect: React.FC<{
   )
 }
 
+const extractJsonPaths = (obj: unknown, prefix = ''): string[] => {
+  if (obj === null || obj === undefined) return []
+  let paths: string[] = []
+
+  if (Array.isArray(obj)) {
+    if (obj.length === 0) {
+      paths.push(`${prefix}[]`)
+    } else {
+      const firstItem = obj[0]
+      if (typeof firstItem === 'object' && firstItem !== null) {
+        paths = [...paths, ...extractJsonPaths(firstItem, `${prefix}[0]`)]
+      } else {
+        paths.push(`${prefix}[0]`)
+      }
+    }
+  } else if (typeof obj === 'object') {
+    const typedObj = obj as Record<string, unknown>
+    for (const key in typedObj) {
+      if (Object.prototype.hasOwnProperty.call(typedObj, key)) {
+        const value = typedObj[key]
+        const currentPath = prefix ? `${prefix}.${key}` : key
+        if (typeof value === 'object' && value !== null) {
+          paths = [...paths, ...extractJsonPaths(value, currentPath)]
+        } else {
+          paths.push(currentPath)
+        }
+      }
+    }
+  } else {
+    paths.push(prefix)
+  }
+
+  return paths
+}
+
 const VariablePicker: React.FC<{
   triggerType?: string
+  triggerConfig?: NodeConfig
   onSelect: (variable: string) => void
-}> = ({ triggerType, onSelect }) => {
-  const variables =
-    triggerType === 'trigger-webhook'
-      ? ['{{subject}}', '{{amount}}', '{{status}}']
-      : ['{{subject}}', '{{from}}', '{{date}}', '{{body}}']
+}> = ({ triggerType, triggerConfig, onSelect }) => {
+  let variables: string[] = []
+  let infoMessage: string | null = null
+
+  if (triggerType === 'trigger-webhook') {
+    const payloadStr = (triggerConfig as WebhookTriggerNodeConfig)
+      ?.samplePayload
+    if (payloadStr) {
+      try {
+        const parsed = JSON.parse(payloadStr)
+        const paths = extractJsonPaths(parsed)
+        variables = paths.map((p) => `{{${p}}}`)
+      } catch {
+        infoMessage = 'Invalid Sample JSON Payload in Webhook trigger.'
+      }
+    }
+
+    if (variables.length === 0 && !infoMessage) {
+      variables = ['{{subject}}', '{{amount}}', '{{status}}']
+      infoMessage =
+        'Paste a Sample JSON Payload in your Webhook Trigger to unlock custom fields.'
+    }
+  } else {
+    // Default IMAP Email Trigger
+    variables = ['{{subject}}', '{{from}}', '{{date}}', '{{body}}']
+  }
+
   return (
     <div className="flex flex-col gap-1 mt-3">
       <span className="text-[10px] text-white/40">
         Suggested variables from Trigger:
       </span>
+      {infoMessage && (
+        <span className="text-[9px] text-amber-400/80 italic mb-1 leading-snug">
+          {infoMessage}
+        </span>
+      )}
       <div className="flex flex-wrap gap-2 mt-1">
         {variables.map((v) => (
           <button
@@ -184,6 +248,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
   triggerId,
   onSaveWorkflow,
   triggerType,
+  triggerConfig,
 }) => {
   const [config, setConfig] = useState<NodeConfig>(
     initialConfig || ({} as NodeConfig)
@@ -320,6 +385,44 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 </div>
                 {triggerId && userId && (
                   <>
+                    <div className="flex flex-col">
+                      <label className="mb-2 text-sm font-medium text-white/80">
+                        Sample JSON Payload
+                      </label>
+                      <textarea
+                        className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-[#8A3FFC] h-32 text-xs font-mono transition-all duration-200"
+                        value={
+                          (config as WebhookTriggerNodeConfig).samplePayload ||
+                          ''
+                        }
+                        onChange={(e) => {
+                          handleChange('samplePayload', e.target.value)
+                        }}
+                        placeholder={`{\n  "subject": "Payment Received",\n  "amount": 25000,\n  "status": "success"\n}`}
+                      />
+                      {(() => {
+                        const payload = (config as WebhookTriggerNodeConfig)
+                          .samplePayload
+                        if (payload) {
+                          try {
+                            JSON.parse(payload)
+                            return (
+                              <span className="mt-1 text-[10px] text-[#00F5A0]">
+                                ✓ Valid JSON
+                              </span>
+                            )
+                          } catch {
+                            return (
+                              <span className="mt-1 text-[10px] text-[#FF2E63]">
+                                ✗ Invalid JSON format
+                              </span>
+                            )
+                          }
+                        }
+                        return null
+                      })()}
+                    </div>
+
                     <div className="flex flex-col">
                       <label className="mb-2 text-sm font-medium text-white/80">
                         API Key
@@ -494,6 +597,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
               />
               <VariablePicker
                 triggerType={triggerType}
+                triggerConfig={triggerConfig}
                 onSelect={(v) =>
                   handleChange(
                     'content',

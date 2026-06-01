@@ -279,6 +279,7 @@ const WorkflowEditorContent: React.FC = () => {
   const selectedNode = nodes.find((n) => n.id === selectedNodeId)
   const triggerNode = nodes.find((n) => n.type?.startsWith('trigger'))
   const triggerType = triggerNode?.type
+  const triggerConfig = triggerNode?.data?.config
 
   if (isLoading) return <div>Loading...</div>
 
@@ -347,6 +348,7 @@ const WorkflowEditorContent: React.FC = () => {
           triggerId={workflow?.trigger?.id}
           onSaveWorkflow={handleSaveWorkflow}
           triggerType={triggerType}
+          triggerConfig={triggerConfig}
         />
       )}
 
