@@ -1,52 +1,68 @@
-import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { Login } from './pages/Login';
-import { Dashboard } from './pages/Dashboard';
-import { WorkflowEditor } from './pages/WorkflowEditor';
-import { DeveloperDashboard } from './pages/DeveloperDashboard';
-import { Layout } from './components/Layout';
-
-const PrivateRoute: React.FC<{ children: React.ReactNode; fullWidth?: boolean }> = ({ children, fullWidth }) => {
-  const token = localStorage.getItem('token');
-  return token ? <Layout fullWidth={fullWidth}>{children}</Layout> : <Navigate to="/login" />;
-};
-
-const DeveloperRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const token = localStorage.getItem('token');
-  const isDeveloper = localStorage.getItem('is_developer') === 'true';
-
-  if (!token) {
-    return <Navigate to="/login" />;
-  }
-
-  if (!isDeveloper) {
-    return <Navigate to="/" />;
-  }
-
-  return <Layout>{children}</Layout>;
-};
+import React, { useEffect } from 'react'
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from 'react-router-dom'
+import { Login } from './pages/Login'
+import { Dashboard } from './pages/Dashboard'
+import { WorkflowEditor } from './pages/WorkflowEditor'
+import { DeveloperDashboard } from './pages/DeveloperDashboard'
+import { Settings } from './pages/Settings'
+import { Layout } from './components/Layout'
 
 // Component to handle global events like logout
 const AuthHandler: React.FC = () => {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
   useEffect(() => {
     const handleLogout = () => {
-      localStorage.removeItem('token');
-      localStorage.removeItem('is_developer');
-      alert('Session expired. Please login again.');
-      navigate('/login');
-    };
+      localStorage.removeItem('token')
+      localStorage.removeItem('is_developer')
+      alert('Session expired. Please login again.')
+      navigate('/login')
+    }
 
-    window.addEventListener('auth:logout', handleLogout);
+    window.addEventListener('auth:logout', handleLogout)
 
     return () => {
-      window.removeEventListener('auth:logout', handleLogout);
-    };
-  }, [navigate]);
+      window.removeEventListener('auth:logout', handleLogout)
+    }
+  }, [navigate])
 
-  return null;
-};
+  return null
+}
+
+const PrivateRoute: React.FC<{
+  children: React.ReactNode
+  fullWidth?: boolean
+}> = ({ children, fullWidth }) => {
+  const token = localStorage.getItem('token')
+  return token ? (
+    <Layout fullWidth={fullWidth}>{children}</Layout>
+  ) : (
+    <Navigate to="/login" />
+  )
+}
+
+const DeveloperRoute: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const token = localStorage.getItem('token')
+  const isDeveloper = localStorage.getItem('is_developer') === 'true'
+
+  if (!token) {
+    return <Navigate to="/login" />
+  }
+
+  if (!isDeveloper) {
+    return <Navigate to="/" />
+  }
+
+  return <Layout>{children}</Layout>
+}
 
 function App() {
   return (
@@ -78,9 +94,17 @@ function App() {
             </DeveloperRoute>
           }
         />
+        <Route
+          path="/settings"
+          element={
+            <PrivateRoute>
+              <Settings />
+            </PrivateRoute>
+          }
+        />
       </Routes>
     </Router>
-  );
+  )
 }
 
-export default App;
+export default App
