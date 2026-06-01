@@ -46,6 +46,46 @@ export const applyTemplate = (template: string, data: WorkflowData): string => {
   })
 }
 
+export const splitDiscordMessage = (
+  content: string,
+  limit = 2000
+): string[] => {
+  if (content.length <= limit) return [content]
+
+  const chunks: string[] = []
+  const lines = content.split('\n')
+  let currentChunk = ''
+
+  for (const line of lines) {
+    if (line.length > limit) {
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk)
+        currentChunk = ''
+      }
+      let remainingLine = line
+      while (remainingLine.length > limit) {
+        chunks.push(remainingLine.substring(0, limit))
+        remainingLine = remainingLine.substring(limit)
+      }
+      currentChunk = remainingLine
+    } else {
+      const separator = currentChunk ? '\n' : ''
+      if (currentChunk.length + separator.length + line.length > limit) {
+        chunks.push(currentChunk)
+        currentChunk = line
+      } else {
+        currentChunk += separator + line
+      }
+    }
+  }
+
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk)
+  }
+
+  return chunks
+}
+
 export const resolvePath = (
   obj: Record<string, unknown> | unknown[],
   path: string
@@ -155,33 +195,53 @@ export const executeDiscordAction = async (
     return { success: false, message: 'Discord webhook URL or content missing' }
 
   const templatedContent = applyTemplate(content, context.data)
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1000))
-      const response = await axios.post(webhookUrl, {
-        content: templatedContent,
-      })
-      return {
-        success: true,
-        message: 'Discord action successful',
-        data: response.data as Record<string, unknown>,
+  const chunks = splitDiscordMessage(templatedContent, 2000)
+  const results: Record<string, unknown>[] = []
+
+  for (const chunk of chunks) {
+    let success = false
+    let attemptError: unknown = null
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        if (attempt > 0)
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        const response = await axios.post(webhookUrl, {
+          content: chunk,
+        })
+        results.push(response.data as Record<string, unknown>)
+        success = true
+        break
+      } catch (error: unknown) {
+        attemptError = error
+        const axiosError = error as AxiosError
+        const status = axiosError.response?.status
+        if (
+          ((status && (status >= 500 || status === 429)) ||
+            !axiosError.response) &&
+          attempt < 4
+        )
+          continue
+        break
       }
-    } catch (error: unknown) {
-      const axiosError = error as AxiosError
-      const status = axiosError.response?.status
-      if (
-        ((status && (status >= 500 || status === 429)) ||
-          !axiosError.response) &&
-        attempt < 4
-      )
-        continue
+    }
+
+    if (!success) {
       return {
         success: false,
-        message: `Discord action failed: ${getErrorMessage(error)}`,
+        message: `Discord action failed: ${getErrorMessage(attemptError)}`,
       }
     }
   }
-  return { success: false, message: 'Discord action failed after max retries' }
+
+  return {
+    success: true,
+    message:
+      chunks.length > 1
+        ? `Discord action successful (sent in ${chunks.length} chunks)`
+        : 'Discord action successful',
+    data: results[0] || {},
+  }
 }
 
 export const executeNotionAction = async (

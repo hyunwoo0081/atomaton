@@ -2,7 +2,11 @@
 process.env.MASTER_KEY = 'this_is_a_32_byte_test_key_!!!!'
 
 import { describe, it, expect } from 'vitest'
-import { applyTemplate, executeCondition } from '../executor'
+import {
+  applyTemplate,
+  executeCondition,
+  splitDiscordMessage,
+} from '../executor'
 import {
   WorkflowContext,
   WorkflowNode,
@@ -52,6 +56,26 @@ describe('Executor Utilities', () => {
       const template = 'Payload: {{json}}'
       const data = { json: '{"status": "ok"}' }
       expect(applyTemplate(template, data)).toBe('Payload: {"status": "ok"}')
+    })
+  })
+
+  describe('splitDiscordMessage', () => {
+    it('should not split if content is under the limit', () => {
+      const content = 'Short message'
+      const result = splitDiscordMessage(content, 20)
+      expect(result).toEqual(['Short message'])
+    })
+
+    it('should split content by line breaks when exceeding limit', () => {
+      const content = 'Line 1\nLine 2\nLine 3'
+      const result = splitDiscordMessage(content, 10)
+      expect(result).toEqual(['Line 1', 'Line 2', 'Line 3'])
+    })
+
+    it('should slice extremely long single lines without breaks', () => {
+      const content = '12345678901234567890'
+      const result = splitDiscordMessage(content, 5)
+      expect(result).toEqual(['12345', '67890', '12345', '67890'])
     })
   })
 
