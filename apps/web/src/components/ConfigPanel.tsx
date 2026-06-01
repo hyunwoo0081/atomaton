@@ -213,11 +213,11 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
     key: string,
     value: string | number | boolean | object | ConditionRule[]
   ) => {
-    setConfig((prev: NodeConfig) => ({ ...prev, [key]: value }))
-  }
-
-  const handleSave = () => {
-    onSave(config)
+    setConfig((prev: NodeConfig) => {
+      const next = { ...prev, [key]: value }
+      onSave(next)
+      return next
+    })
   }
 
   return (
@@ -506,11 +506,10 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
         )}
       </div>
 
-      <div className="pt-6 border-t border-white/10 flex justify-end space-x-3 mt-auto">
-        <Button variant="secondary" onClick={onClose}>
-          Cancel
+      <div className="pt-6 border-t border-white/10 flex justify-end mt-auto">
+        <Button className="w-full" onClick={onClose}>
+          Close Settings
         </Button>
-        <Button onClick={handleSave}>Apply</Button>
       </div>
     </div>
   )
