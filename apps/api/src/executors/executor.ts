@@ -14,6 +14,7 @@ import {
 import prisma, { Prisma, decrypt } from '@atomaton/db'
 import axios, { AxiosError } from 'axios'
 import { Client } from '@notionhq/client'
+import { enqueueWithDelay } from './queue'
 
 // --- Utility Functions ---
 
@@ -472,6 +473,24 @@ export const executeWorkflow = async (
     return executionLogs
   } catch (error: unknown) {
     const errorMessage = getErrorMessage(error)
+    let remarks: string | null = null
+
+    if (errorMessage.toLowerCase().includes('discord')) {
+      try {
+        const response = await axios.get(
+          'https://discordstatus.com/api/v2/status.json',
+          { timeout: 3000 }
+        )
+        const statusIndicator = response.data?.status?.indicator
+        const statusDesc = response.data?.status?.description
+        if (statusIndicator && statusIndicator !== 'none') {
+          remarks = `Potential Discord Outage detected: ${statusDesc} (indicator: ${statusIndicator})`
+        }
+      } catch {
+        // Ignore status page fetch errors
+      }
+    }
+
     const failLog: LogEntry = {
       workflowId,
       triggerId,
@@ -479,10 +498,42 @@ export const executeWorkflow = async (
       message: `Workflow failed: ${errorMessage}`,
       context: data as unknown as Prisma.InputJsonValue,
       executionId,
+      remarks,
     }
+
     await prisma.log.create({
       data: failLog as unknown as Prisma.LogCreateInput,
     })
+
+    if (!overrideWorkflowData) {
+      const currentRetry = context.retryCount || 0
+      if (currentRetry < 3) {
+        const nextRetry = currentRetry + 1
+        const delays = [10000, 60000, 300000] // 10s, 1m, 5m
+        const delay = delays[currentRetry] || 10000
+
+        const retryLog: LogEntry = {
+          workflowId,
+          triggerId,
+          status: 'ENQUEUED',
+          message: `Scheduled retry attempt ${nextRetry} of 3`,
+          remarks: `Will execute in ${delay / 1000} seconds`,
+          context: data as unknown as Prisma.InputJsonValue,
+          executionId,
+        }
+
+        await prisma.log.create({
+          data: retryLog as unknown as Prisma.LogCreateInput,
+        })
+
+        const retryContext = {
+          ...context,
+          retryCount: nextRetry,
+        }
+        enqueueWithDelay(retryContext, delay)
+      }
+    }
+
     if (overrideWorkflowData) {
       const history = await prisma.log.findMany({ where: { executionId } })
       return [...(history as unknown as LogEntry[]), failLog]

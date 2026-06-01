@@ -1,58 +1,67 @@
 // apps/api/src/executors/queue.ts
-import { WorkflowContext } from './types';
+import { WorkflowContext } from './types'
 
-type QueueItem = WorkflowContext;
+type QueueItem = WorkflowContext
 
-const queue: QueueItem[] = [];
-let isProcessing = false;
+const queue: QueueItem[] = []
+let isProcessing = false
 
-type ProcessorFunction = (context: WorkflowContext) => Promise<void>;
+type ProcessorFunction = (context: WorkflowContext) => Promise<void>
 
-let processor: ProcessorFunction | null = null;
+let processor: ProcessorFunction | null = null
 
 export const setProcessor = (fn: ProcessorFunction) => {
-  processor = fn;
-  processQueue(); // Start processing if items are already in queue
-};
+  processor = fn
+  processQueue() // Start processing if items are already in queue
+}
 
 export const resetProcessor = () => {
-  processor = null;
-};
+  processor = null
+}
 
 export const enqueue = (item: QueueItem) => {
-  queue.push(item);
-  processQueue();
-};
+  queue.push(item)
+  processQueue()
+}
+
+export const enqueueWithDelay = (item: QueueItem, delayMs: number) => {
+  setTimeout(() => {
+    enqueue(item)
+  }, delayMs)
+}
 
 export const processQueue = async () => {
   if (isProcessing || queue.length === 0 || !processor) {
-    return;
+    return
   }
 
-  isProcessing = true;
-  const item = queue.shift(); // Get the next item
+  isProcessing = true
+  const item = queue.shift() // Get the next item
 
   if (item) {
     try {
-      console.log(`Processing workflow execution: ${item.executionId}`);
-      await processor(item);
-      console.log(`Finished processing workflow execution: ${item.executionId}`);
+      console.log(`Processing workflow execution: ${item.executionId}`)
+      await processor(item)
+      console.log(`Finished processing workflow execution: ${item.executionId}`)
     } catch (error) {
-      console.error(`Error processing workflow execution ${item.executionId}:`, error);
+      console.error(
+        `Error processing workflow execution ${item.executionId}:`,
+        error
+      )
       // TODO: Implement retry logic for failed items if necessary
     } finally {
-      isProcessing = false;
-      processQueue(); // Process the next item
+      isProcessing = false
+      processQueue() // Process the next item
     }
   } else {
-    isProcessing = false;
+    isProcessing = false
   }
-};
+}
 
 export const getQueueSize = (): number => {
-  return queue.length;
-};
+  return queue.length
+}
 
 export const clearQueue = () => {
-  queue.length = 0;
-};
+  queue.length = 0
+}

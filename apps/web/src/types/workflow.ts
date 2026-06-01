@@ -89,6 +89,7 @@ export interface LogEntry {
   message: string
   context?: Record<string, unknown>
   executionId?: string
+  remarks?: string | null
   created_at?: string
 }
 

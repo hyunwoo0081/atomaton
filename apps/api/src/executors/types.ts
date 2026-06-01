@@ -13,6 +13,7 @@ export interface WorkflowContext {
   executionId: string
   data: WorkflowData
   results: Record<string, ActionResult>
+  retryCount?: number
 }
 
 export interface ActionResult {
@@ -32,6 +33,7 @@ export interface LogEntry {
   context: Prisma.InputJsonValue
   executionId: string
   source?: string
+  remarks?: string | null
   created_at?: Date | string
 }
 

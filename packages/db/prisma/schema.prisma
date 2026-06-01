@@ -101,6 +101,7 @@ model Log {
   context      Json?
   source       String?
   executionId  String?
+  remarks      String?   @db.Text
   created_at   DateTime  @default(now())
 
   @@index([workflowId, created_at])
