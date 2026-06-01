@@ -47,6 +47,23 @@ export const applyTemplate = (template: string, data: WorkflowData): string => {
   })
 }
 
+export const resolveTemplates = (val: unknown, data: WorkflowData): unknown => {
+  if (typeof val === 'string') {
+    return applyTemplate(val, data)
+  }
+  if (Array.isArray(val)) {
+    return val.map((item) => resolveTemplates(item, data))
+  }
+  if (val !== null && typeof val === 'object') {
+    const res: Record<string, unknown> = {}
+    for (const key of Object.keys(val)) {
+      res[key] = resolveTemplates((val as Record<string, unknown>)[key], data)
+    }
+    return res
+  }
+  return val
+}
+
 export const splitDiscordMessage = (
   content: string,
   limit = 2000
@@ -128,7 +145,20 @@ export const executeHttpRequestAction = async (
       templatedHeaders[key] = applyTemplate(headers[key], context.data)
     }
   }
-  const templatedBody = body ? applyTemplate(body, context.data) : undefined
+  let templatedBody: unknown = undefined
+  if (body) {
+    try {
+      const parsed = JSON.parse(body)
+      templatedBody = resolveTemplates(parsed, context.data)
+    } catch {
+      const rawTemplated = applyTemplate(body, context.data)
+      try {
+        templatedBody = JSON.parse(rawTemplated)
+      } catch {
+        templatedBody = rawTemplated
+      }
+    }
+  }
 
   const maxRetries = 5
   const retryDelays = [1000, 5000, 30000, 120000, 600000]
@@ -144,7 +174,7 @@ export const executeHttpRequestAction = async (
         method,
         url: templatedUrl,
         headers: templatedHeaders,
-        data: templatedBody ? JSON.parse(templatedBody) : undefined,
+        data: templatedBody,
         timeout: 30000,
       })
 
@@ -282,10 +312,8 @@ export const executeNotionAction = async (
 
     const notion = new Client({ auth: token })
 
-    // Recursive template application using JSON stringify/parse
-    const templatedProperties = JSON.parse(
-      applyTemplate(JSON.stringify(properties), context.data)
-    )
+    // Structural template application (immune to JSON injection)
+    const templatedProperties = resolveTemplates(properties, context.data)
 
     const maxRetries = 5
     const retryDelays = [1000, 5000, 30000, 120000, 600000]

@@ -6,6 +6,7 @@ import {
   applyTemplate,
   executeCondition,
   splitDiscordMessage,
+  resolveTemplates,
 } from '../executor'
 import {
   WorkflowContext,
@@ -56,6 +57,56 @@ describe('Executor Utilities', () => {
       const template = 'Payload: {{json}}'
       const data = { json: '{"status": "ok"}' }
       expect(applyTemplate(template, data)).toBe('Payload: {"status": "ok"}')
+    })
+  })
+
+  describe('resolveTemplates', () => {
+    it('should recursively resolve string templates in objects', () => {
+      const template = {
+        title: 'Issue: {{subject}}',
+        meta: {
+          author: '{{user.name}}',
+          active: true,
+        },
+      }
+      const data = {
+        subject: 'Database connection failed',
+        user: { name: 'Alice' },
+      }
+      const result = resolveTemplates(template, data)
+      expect(result).toEqual({
+        title: 'Issue: Database connection failed',
+        meta: {
+          author: 'Alice',
+          active: true,
+        },
+      })
+    })
+
+    it('should recursively resolve string templates in arrays', () => {
+      const template = ['Hello {{name}}', { msg: 'System check: {{status}}' }]
+      const data = {
+        name: 'Bob',
+        status: 'Green',
+      }
+      const result = resolveTemplates(template, data)
+      expect(result).toEqual(['Hello Bob', { msg: 'System check: Green' }])
+    })
+
+    it('should prevent JSON injection by keeping injected quotes as literal string characters', () => {
+      const template = {
+        message: '{{input}}',
+      }
+      // Payload designed to inject new keys/values if string-replaced raw
+      const data = {
+        input: 'test", "isAdmin": true, "dummy": "',
+      }
+      const result = resolveTemplates(template, data) as Record<string, unknown>
+
+      // Expect that it does NOT add 'isAdmin' as a key to the object
+      expect(result.isAdmin).toBeUndefined()
+      // Expect that 'message' contains the literal injected quote string
+      expect(result.message).toBe('test", "isAdmin": true, "dummy": "')
     })
   })
 

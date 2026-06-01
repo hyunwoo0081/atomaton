@@ -179,6 +179,57 @@ describe('HTTP Request Node & Path Resolution', () => {
 
       expect(mockedAxios).toHaveBeenCalledTimes(2)
     })
+
+    it('should securely handle JSON injection attempts in body template', async () => {
+      const context: WorkflowContext = {
+        workflowId: 'wf1',
+        triggerId: 'tr1',
+        executionId: 'ex-sec',
+        data: {
+          msg: 'hello", "isAdmin": true, "dummy": "',
+        },
+        results: {},
+      }
+
+      const workflow: UIConfig = {
+        nodes: [
+          {
+            id: 't1',
+            type: 'trigger-webhook',
+            data: { label: 'T', config: {} as unknown as ActionConfig },
+          },
+          {
+            id: 'h1',
+            type: 'action-http',
+            data: {
+              label: 'H',
+              config: {
+                method: 'POST',
+                url: 'https://api.com',
+                body: '{"m":"{{msg}}"}',
+              } as unknown as ActionConfig,
+            },
+          },
+        ],
+        edges: [{ id: 'e1', source: 't1', target: 'h1' }],
+      }
+
+      mockedAxios.mockResolvedValueOnce({
+        status: 200,
+        data: { ok: true },
+      })
+
+      const promise = executeWorkflow(context, workflow)
+      await vi.runAllTimersAsync()
+      await promise
+
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://api.com',
+          data: { m: 'hello", "isAdmin": true, "dummy": "' },
+        })
+      )
+    })
   })
 
   describe('executeDiscordAction Retry Logic', () => {
