@@ -58,6 +58,7 @@ interface WorkflowState {
   updateNodeData: (id: string, data: Partial<CustomNodeData>) => void
   setNodes: (nodes: Node<CustomNodeData>[]) => void
   setEdges: (edges: Edge[]) => void
+  setIsDirty: (isDirty: boolean) => void
   validateWorkflow: () => void
   updateGlobalSettings: (settings: Partial<GlobalSettings>) => void
 
@@ -188,6 +189,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     get().validateWorkflow()
   },
   setEdges: (edges) => set({ edges }),
+  setIsDirty: (isDirty) => set({ isDirty }),
 
   validateWorkflow: () => {
     const { nodes } = get()

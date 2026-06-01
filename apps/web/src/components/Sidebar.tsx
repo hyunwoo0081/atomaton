@@ -2,10 +2,12 @@ import React, { useState } from 'react'
 import { Button } from '@atomaton/ui'
 import { GlobalSettingsModal } from './GlobalSettingsModal'
 
-export const Sidebar: React.FC<{ onSave: () => void; onTest: () => void }> = ({
-  onSave,
-  onTest,
-}) => {
+export const Sidebar: React.FC<{
+  onSave: () => void
+  onTest: () => void
+  isSaving?: boolean
+  isDirty?: boolean
+}> = ({ onSave, onTest, isSaving = false, isDirty = false }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
@@ -17,8 +19,13 @@ export const Sidebar: React.FC<{ onSave: () => void; onTest: () => void }> = ({
     <aside className="w-64 bg-white/5 backdrop-blur-xl border-r border-white/10 p-4 flex flex-col gap-4 z-20">
       <div className="text-lg font-bold text-white mb-2">Workflow</div>
       <div className="space-y-2">
-        <Button variant="secondary" onClick={onSave} className="w-full">
-          Save
+        <Button
+          variant="secondary"
+          onClick={onSave}
+          className="w-full"
+          disabled={isSaving || !isDirty}
+        >
+          {isSaving ? 'Saving...' : 'Save'}
         </Button>
         <Button onClick={onTest} className="w-full">
           Run Test

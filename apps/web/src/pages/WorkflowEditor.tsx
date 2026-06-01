@@ -64,6 +64,8 @@ const WorkflowEditorContent: React.FC = () => {
     addNode,
     globalSettings,
     updateGlobalSettings,
+    isDirty,
+    setIsDirty,
   } = useWorkflowStore()
 
   const nodeTypes: NodeTypes = useMemo(
@@ -96,8 +98,9 @@ const WorkflowEditorContent: React.FC = () => {
       if (workflow.settings) {
         updateGlobalSettings(workflow.settings)
       }
+      setIsDirty(false)
     }
-  }, [workflow, setNodes, setEdges, updateGlobalSettings])
+  }, [workflow, setNodes, setEdges, updateGlobalSettings, setIsDirty])
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
       setSelectedNodeId(node.id)
@@ -137,6 +140,7 @@ const WorkflowEditorContent: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflow', id] })
+      setIsDirty(false)
       alert('Workflow saved successfully!')
     },
     onError: (error: unknown) => {
@@ -283,6 +287,8 @@ const WorkflowEditorContent: React.FC = () => {
       <Sidebar
         onSave={handleSaveWorkflow}
         onTest={() => setIsTestModalOpen(true)}
+        isSaving={saveWorkflowMutation.isPending}
+        isDirty={isDirty}
       />
       <div className="flex-1 relative" ref={reactFlowWrapper}>
         <ReactFlow
