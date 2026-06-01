@@ -6,10 +6,10 @@
 
 */
 -- AlterTable
-ALTER TABLE `account` MODIFY `credentials` JSON NOT NULL;
+ALTER TABLE `Account` MODIFY `credentials` JSON NOT NULL;
 
 -- AlterTable
-ALTER TABLE `log` ADD COLUMN `actionId` VARCHAR(191) NULL,
+ALTER TABLE `Log` ADD COLUMN `actionId` VARCHAR(191) NULL,
     ADD COLUMN `executionId` VARCHAR(191) NULL,
     ADD COLUMN `source` VARCHAR(191) NULL,
     ADD COLUMN `triggerId` VARCHAR(191) NULL,
