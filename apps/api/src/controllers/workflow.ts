@@ -105,8 +105,11 @@ export const updateWorkflow = async (req: Request, res: Response) => {
 
     if (nodes && edges) {
       await prisma.$transaction(async (tx) => {
-        await tx.trigger.deleteMany({ where: { workflowId: id } })
         await tx.action.deleteMany({ where: { workflowId: id } })
+
+        const existingTrigger = await tx.trigger.findUnique({
+          where: { workflowId: id },
+        })
 
         const triggerNode = nodes.find((n) => n.type.startsWith('trigger'))
         if (triggerNode) {
@@ -114,16 +117,39 @@ export const updateWorkflow = async (req: Request, res: Response) => {
             accountId?: string
           }
           if (triggerNode.type === 'trigger-webhook' || config.accountId) {
-            await tx.trigger.create({
-              data: {
-                workflowId: id,
-                type:
-                  triggerNode.type === 'trigger-webhook'
-                    ? 'WEBHOOK'
-                    : 'IMAP_POLLING',
-                config: triggerNode.data
-                  .config as unknown as Prisma.InputJsonValue,
-              },
+            const triggerData = {
+              type:
+                triggerNode.type === 'trigger-webhook'
+                  ? 'WEBHOOK'
+                  : 'IMAP_POLLING',
+              config: triggerNode.data
+                .config as unknown as Prisma.InputJsonValue,
+            }
+
+            if (existingTrigger) {
+              await tx.trigger.update({
+                where: { id: existingTrigger.id },
+                data: triggerData,
+              })
+            } else {
+              await tx.trigger.create({
+                data: {
+                  ...triggerData,
+                  workflowId: id,
+                },
+              })
+            }
+          } else {
+            if (existingTrigger) {
+              await tx.trigger.delete({
+                where: { id: existingTrigger.id },
+              })
+            }
+          }
+        } else {
+          if (existingTrigger) {
+            await tx.trigger.delete({
+              where: { id: existingTrigger.id },
             })
           }
         }
