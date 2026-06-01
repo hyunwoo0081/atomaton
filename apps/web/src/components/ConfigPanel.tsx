@@ -197,6 +197,18 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId, initialConfig])
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose])
+
   const handleChange = (
     key: string,
     value: string | number | boolean | object | ConditionRule[]
