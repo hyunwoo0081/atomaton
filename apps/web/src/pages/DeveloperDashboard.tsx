@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Card, Button, Input } from '@atomaton/ui'
 import { api } from '../utils/api'
 import { useQuery } from '@tanstack/react-query'
@@ -34,6 +34,20 @@ export const DeveloperDashboard: React.FC = () => {
   const [newIsDeveloper, setNewIsDeveloper] = useState(false)
   const [modalError, setModalError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const dialogRef = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (isModalOpen) {
+      if (dialog && !dialog.open) {
+        dialog.showModal()
+      }
+    } else {
+      if (dialog && dialog.open) {
+        dialog.close()
+      }
+    }
+  }, [isModalOpen])
 
   // Fetch stats (always enabled)
   const {
@@ -329,87 +343,94 @@ export const DeveloperDashboard: React.FC = () => {
       )}
 
       {/* Add User Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <Card className="max-w-md w-full p-6 border border-white/10 bg-[#0D0E12]/95 shadow-2xl relative">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-white">Create New User</h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-white/40 hover:text-white transition-colors p-1"
+      <dialog
+        ref={dialogRef}
+        onClose={() => setIsModalOpen(false)}
+        onClick={(e) => {
+          if (e.target === dialogRef.current) {
+            setIsModalOpen(false)
+          }
+        }}
+        className="border-0 bg-transparent p-0 outline-none backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+      >
+        <Card className="max-w-md w-full p-6 border border-white/10 bg-[#0D0E12]/95 shadow-2xl relative">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-white">Create New User</h3>
+            <button
+              onClick={() => setIsModalOpen(false)}
+              className="text-white/40 hover:text-white transition-colors p-1"
+            >
+              ✕
+            </button>
+          </div>
+
+          {modalError && (
+            <div className="p-3 mb-4 rounded-lg bg-[#FF2E63]/10 border border-[#FF2E63]/25 text-[#FF2E63] text-sm font-medium flex items-center space-x-2">
+              <span>⚠️</span>
+              <span>{modalError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleAddUser} className="space-y-4">
+            <Input
+              label="Email address"
+              type="email"
+              required
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              placeholder="user@example.com"
+              disabled={submitting}
+            />
+
+            <Input
+              label="Password"
+              type="password"
+              required
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="••••••••"
+              disabled={submitting}
+              helperText="Must be at least 8 characters long."
+            />
+
+            <div className="flex items-center space-x-3 pt-2">
+              <input
+                id="is-dev-toggle"
+                type="checkbox"
+                checked={newIsDeveloper}
+                onChange={(e) => setNewIsDeveloper(e.target.checked)}
+                disabled={submitting}
+                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#8A3FFC] focus:ring-[#8A3FFC]/50 focus:ring-2 focus:ring-offset-0"
+              />
+              <label
+                htmlFor="is-dev-toggle"
+                className="text-sm font-medium text-white/70 cursor-pointer select-none"
               >
-                ✕
-              </button>
+                Grant Administrator / Developer privileges
+              </label>
             </div>
 
-            {modalError && (
-              <div className="p-3 mb-4 rounded-lg bg-[#FF2E63]/10 border border-[#FF2E63]/25 text-[#FF2E63] text-sm font-medium flex items-center space-x-2">
-                <span>⚠️</span>
-                <span>{modalError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleAddUser} className="space-y-4">
-              <Input
-                label="Email address"
-                type="email"
-                required
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="user@example.com"
+            <div className="flex space-x-3 pt-4 justify-end">
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => setIsModalOpen(false)}
                 disabled={submitting}
-              />
-
-              <Input
-                label="Password"
-                type="password"
-                required
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="••••••••"
+                className="px-4 py-2"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
                 disabled={submitting}
-                helperText="Must be at least 8 characters long."
-              />
-
-              <div className="flex items-center space-x-3 pt-2">
-                <input
-                  id="is-dev-toggle"
-                  type="checkbox"
-                  checked={newIsDeveloper}
-                  onChange={(e) => setNewIsDeveloper(e.target.checked)}
-                  disabled={submitting}
-                  className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#8A3FFC] focus:ring-[#8A3FFC]/50 focus:ring-2 focus:ring-offset-0"
-                />
-                <label
-                  htmlFor="is-dev-toggle"
-                  className="text-sm font-medium text-white/70 cursor-pointer select-none"
-                >
-                  Grant Administrator / Developer privileges
-                </label>
-              </div>
-
-              <div className="flex space-x-3 pt-4 justify-end">
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  disabled={submitting}
-                  className="px-4 py-2"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={submitting}
-                  className="bg-gradient-to-r from-[#8A3FFC] to-[#E02DFF] text-white px-4 py-2"
-                >
-                  {submitting ? 'Creating...' : 'Create User'}
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
+                className="bg-gradient-to-r from-[#8A3FFC] to-[#E02DFF] text-white px-4 py-2"
+              >
+                {submitting ? 'Creating...' : 'Create User'}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </dialog>
     </div>
   )
 }

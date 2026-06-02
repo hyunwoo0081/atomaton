@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Button, Card, Input } from '@atomaton/ui'
 import { api } from '../utils/api'
@@ -18,6 +18,20 @@ export const Dashboard: React.FC = () => {
   const [newWorkflowName, setNewWorkflowName] = useState('')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
+  const createDialogRef = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    const dialog = createDialogRef.current
+    if (isCreateModalOpen) {
+      if (dialog && !dialog.open) {
+        dialog.showModal()
+      }
+    } else {
+      if (dialog && dialog.open) {
+        dialog.close()
+      }
+    }
+  }, [isCreateModalOpen])
 
   const {
     data: workflows = [],
@@ -134,62 +148,69 @@ export const Dashboard: React.FC = () => {
       </section>
 
       {/* Create Workflow Modal */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <Card className="max-w-md w-full p-6 border border-white/10 bg-[#0D0E12]/95 shadow-2xl relative">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-white">
-                Create New Workflow
-              </h3>
-              <button
-                onClick={() => setIsCreateModalOpen(false)}
-                className="text-white/40 hover:text-white transition-colors p-1"
-              >
-                ✕
-              </button>
+      <dialog
+        ref={createDialogRef}
+        onClose={() => setIsCreateModalOpen(false)}
+        onClick={(e) => {
+          if (e.target === createDialogRef.current) {
+            setIsCreateModalOpen(false)
+          }
+        }}
+        className="border-0 bg-transparent p-0 outline-none backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+      >
+        <Card className="max-w-md w-full p-6 border border-white/10 bg-[#0D0E12]/95 shadow-2xl relative">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-white">
+              Create New Workflow
+            </h3>
+            <button
+              onClick={() => setIsCreateModalOpen(false)}
+              className="text-white/40 hover:text-white transition-colors p-1"
+            >
+              ✕
+            </button>
+          </div>
+
+          {createError && (
+            <div className="p-3 mb-4 rounded-lg bg-[#FF2E63]/10 border border-[#FF2E63]/25 text-[#FF2E63] text-sm font-medium flex items-center space-x-2">
+              <span>⚠️</span>
+              <span>{createError}</span>
             </div>
+          )}
 
-            {createError && (
-              <div className="p-3 mb-4 rounded-lg bg-[#FF2E63]/10 border border-[#FF2E63]/25 text-[#FF2E63] text-sm font-medium flex items-center space-x-2">
-                <span>⚠️</span>
-                <span>{createError}</span>
-              </div>
-            )}
+          <form onSubmit={handleCreateWorkflow} className="space-y-5">
+            <Input
+              label="Workflow Name"
+              type="text"
+              required
+              autoFocus
+              value={newWorkflowName}
+              onChange={(e) => setNewWorkflowName(e.target.value)}
+              placeholder="My Awesome Workflow"
+              disabled={creating}
+            />
 
-            <form onSubmit={handleCreateWorkflow} className="space-y-5">
-              <Input
-                label="Workflow Name"
-                type="text"
-                required
-                autoFocus
-                value={newWorkflowName}
-                onChange={(e) => setNewWorkflowName(e.target.value)}
-                placeholder="My Awesome Workflow"
+            <div className="flex space-x-3 pt-4 justify-end">
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => setIsCreateModalOpen(false)}
                 disabled={creating}
-              />
-
-              <div className="flex space-x-3 pt-4 justify-end">
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  disabled={creating}
-                  className="px-4 py-2"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={creating}
-                  className="bg-gradient-to-r from-[#8A3FFC] to-[#E02DFF] text-white px-4 py-2"
-                >
-                  {creating ? 'Creating...' : 'Create'}
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
+                className="px-4 py-2"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={creating}
+                className="bg-gradient-to-r from-[#8A3FFC] to-[#E02DFF] text-white px-4 py-2"
+              >
+                {creating ? 'Creating...' : 'Create'}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </dialog>
     </div>
   )
 }
