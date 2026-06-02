@@ -12,6 +12,7 @@ import ReactFlow, {
   ReactFlowProvider,
   Panel,
   ReactFlowInstance,
+  updateEdge,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 
@@ -37,6 +38,30 @@ const AutomationEditorContent = () => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance | null>(null)
+
+  const edgeUpdateSuccessful = useRef(true)
+
+  const onEdgeUpdateStart = useCallback(() => {
+    edgeUpdateSuccessful.current = false
+  }, [])
+
+  const onEdgeUpdate = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      edgeUpdateSuccessful.current = true
+      setEdges((eds) => updateEdge(oldEdge, newConnection, eds))
+    },
+    [setEdges]
+  )
+
+  const onEdgeUpdateEnd = useCallback(
+    (_: MouseEvent | TouchEvent, edge: Edge) => {
+      if (!edgeUpdateSuccessful.current) {
+        setEdges((eds) => eds.filter((e) => e.id !== edge.id))
+      }
+      edgeUpdateSuccessful.current = true
+    },
+    [setEdges]
+  )
 
   const nodeTypes = useMemo(
     () => ({
@@ -182,6 +207,9 @@ const AutomationEditorContent = () => {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onEdgeUpdate={onEdgeUpdate}
+            onEdgeUpdateStart={onEdgeUpdateStart}
+            onEdgeUpdateEnd={onEdgeUpdateEnd}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             onInit={setReactFlowInstance}

@@ -54,3 +54,10 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+
+/* Selected React Flow Edge Styling */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--color-vibrant-pink, #E02DFF) !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 6px rgba(224, 45, 255, 0.6)) !important;
+}

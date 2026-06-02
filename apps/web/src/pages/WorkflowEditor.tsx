@@ -10,6 +10,7 @@ import ReactFlow, {
   type Connection,
   type Node,
   type Edge,
+  updateEdge,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { api } from '../utils/api'
@@ -67,6 +68,32 @@ const WorkflowEditorContent: React.FC = () => {
     isDirty,
     setIsDirty,
   } = useWorkflowStore()
+
+  const edgeUpdateSuccessful = useRef(true)
+
+  const onEdgeUpdateStart = useCallback(() => {
+    edgeUpdateSuccessful.current = false
+  }, [])
+
+  const onEdgeUpdate = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      edgeUpdateSuccessful.current = true
+      setEdges(updateEdge(oldEdge, newConnection, edges))
+      setIsDirty(true)
+    },
+    [edges, setEdges, setIsDirty]
+  )
+
+  const onEdgeUpdateEnd = useCallback(
+    (_: MouseEvent | TouchEvent, edge: Edge) => {
+      if (!edgeUpdateSuccessful.current) {
+        setEdges(edges.filter((e) => e.id !== edge.id))
+        setIsDirty(true)
+      }
+      edgeUpdateSuccessful.current = true
+    },
+    [edges, setEdges, setIsDirty]
+  )
 
   const nodeTypes: NodeTypes = useMemo(
     () => ({
@@ -304,6 +331,9 @@ const WorkflowEditorContent: React.FC = () => {
           onConnectEnd={(_event, connectionState) =>
             onConnectEnd(_event, connectionState)
           }
+          onEdgeUpdate={onEdgeUpdate}
+          onEdgeUpdateStart={onEdgeUpdateStart}
+          onEdgeUpdateEnd={onEdgeUpdateEnd}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           onNodesDelete={onNodesDelete}
@@ -311,6 +341,7 @@ const WorkflowEditorContent: React.FC = () => {
           onDragOver={onDragOver}
           nodeTypes={nodeTypes}
           isValidConnection={isValidConnection}
+          deleteKeyCode={['Backspace', 'Delete']}
           fitView
           style={{ background: 'transparent' }}
         >
