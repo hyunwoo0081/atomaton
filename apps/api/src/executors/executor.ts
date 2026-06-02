@@ -10,6 +10,8 @@ import {
   ActionResult,
   LogEntry,
   WorkflowData,
+  RegexReplaceActionConfig,
+  GoogleBridgeActionConfig,
 } from './types'
 import prisma, { Prisma, decrypt } from '@atomaton/db'
 import axios, { AxiosError } from 'axios'
@@ -125,6 +127,14 @@ export const resolvePath = (
     }
   }
   return current
+}
+
+export const getTemplateData = (context: WorkflowContext): WorkflowData => {
+  return {
+    ...context.data,
+    data: context.data,
+    results: context.results,
+  }
 }
 
 // --- Action Execution Functions ---
@@ -360,6 +370,14 @@ export const executeNotionAction = async (
   return { success: false, message: 'Notion action failed after max retries' }
 }
 
+const isEmptyValue = (val: unknown): boolean => {
+  if (val === undefined || val === null) return true
+  if (Array.isArray(val)) return val.length === 0
+  if (typeof val === 'object')
+    return Object.keys(val as Record<string, unknown>).length === 0
+  return String(val).trim() === ''
+}
+
 export const executeCondition = async (
   node: WorkflowNode,
   context: WorkflowContext
@@ -369,21 +387,112 @@ export const executeCondition = async (
   if (!conditions || !Array.isArray(conditions))
     return { success: false, message: 'Invalid condition configuration' }
 
+  const templateData = getTemplateData(context)
+
   let result = logicType === 'AND'
   for (const condition of conditions) {
     const { field, operator, value } = condition
-    const dataValue = context.data[field]
-    let conditionMet = false
-    if (dataValue !== undefined) {
-      switch (operator) {
-        case 'contains':
-          conditionMet = String(dataValue).includes(value)
-          break
-        case 'equals':
-          conditionMet = String(dataValue) === value
-          break
-      }
+    let dataValue = resolvePath(
+      context as unknown as Record<string, unknown>,
+      field
+    )
+    if (dataValue === undefined) {
+      dataValue = resolvePath(context.data, field)
     }
+
+    const resolvedValue = value ? applyTemplate(value, templateData) : ''
+    let conditionMet = false
+
+    switch (operator) {
+      case 'equals':
+        conditionMet =
+          dataValue !== undefined &&
+          dataValue !== null &&
+          String(dataValue) === resolvedValue
+        break
+      case 'contains':
+        conditionMet =
+          dataValue !== undefined &&
+          dataValue !== null &&
+          String(dataValue).includes(resolvedValue)
+        break
+      case 'startsWith':
+        conditionMet =
+          dataValue !== undefined &&
+          dataValue !== null &&
+          String(dataValue).startsWith(resolvedValue)
+        break
+      case 'endsWith':
+        conditionMet =
+          dataValue !== undefined &&
+          dataValue !== null &&
+          String(dataValue).endsWith(resolvedValue)
+        break
+      case 'regex':
+        if (dataValue !== undefined && dataValue !== null) {
+          try {
+            const re = new RegExp(resolvedValue)
+            conditionMet = re.test(String(dataValue))
+          } catch {
+            conditionMet = false
+          }
+        }
+        break
+      case 'gt': {
+        const numData = Number(dataValue)
+        const numVal = Number(resolvedValue)
+        conditionMet =
+          dataValue !== undefined &&
+          dataValue !== null &&
+          !isNaN(numData) &&
+          !isNaN(numVal) &&
+          numData > numVal
+        break
+      }
+      case 'gte': {
+        const numData = Number(dataValue)
+        const numVal = Number(resolvedValue)
+        conditionMet =
+          dataValue !== undefined &&
+          dataValue !== null &&
+          !isNaN(numData) &&
+          !isNaN(numVal) &&
+          numData >= numVal
+        break
+      }
+      case 'lt': {
+        const numData = Number(dataValue)
+        const numVal = Number(resolvedValue)
+        conditionMet =
+          dataValue !== undefined &&
+          dataValue !== null &&
+          !isNaN(numData) &&
+          !isNaN(numVal) &&
+          numData < numVal
+        break
+      }
+      case 'lte': {
+        const numData = Number(dataValue)
+        const numVal = Number(resolvedValue)
+        conditionMet =
+          dataValue !== undefined &&
+          dataValue !== null &&
+          !isNaN(numData) &&
+          !isNaN(numVal) &&
+          numData <= numVal
+        break
+      }
+      case 'isEmpty':
+        conditionMet = isEmptyValue(dataValue)
+        break
+      case 'isNotEmpty':
+        conditionMet = !isEmptyValue(dataValue)
+        break
+      default:
+        conditionMet = false
+        break
+    }
+
     if (logicType === 'AND') {
       if (!conditionMet) {
         result = false
@@ -400,6 +509,120 @@ export const executeCondition = async (
     success: true,
     message: `Condition evaluated to ${result}`,
     data: { result },
+  }
+}
+
+export const executeRegexReplaceAction = async (
+  node: WorkflowNode,
+  context: WorkflowContext
+): Promise<ActionResult> => {
+  const config = node.data.config as RegexReplaceActionConfig
+  const { inputText, rules, outputVariable } = config
+  if (!outputVariable) {
+    return { success: false, message: 'Output variable name missing' }
+  }
+
+  const templateData = getTemplateData(context)
+  let currentText = applyTemplate(inputText || '', templateData)
+
+  if (rules && Array.isArray(rules)) {
+    for (const rule of rules) {
+      const { pattern, replacement, flags = 'g' } = rule
+      if (!pattern) continue
+      try {
+        const re = new RegExp(pattern, flags)
+        const resolvedReplacement = applyTemplate(
+          replacement || '',
+          templateData
+        )
+        currentText = currentText.replace(re, resolvedReplacement)
+      } catch (err: unknown) {
+        return {
+          success: false,
+          message: `Regex execution failed for pattern /${pattern}/: ${getErrorMessage(err)}`,
+        }
+      }
+    }
+  }
+
+  return {
+    success: true,
+    message: 'Regex replace successful',
+    data: { result: currentText },
+    extractedVariables: {
+      [outputVariable]: currentText,
+    },
+  }
+}
+
+export const executeGoogleBridgeAction = async (
+  node: WorkflowNode,
+  context: WorkflowContext
+): Promise<ActionResult> => {
+  const config = node.data.config as GoogleBridgeActionConfig
+  const { webAppUrl, action, payload } = config
+  if (!webAppUrl || !action) {
+    return {
+      success: false,
+      message: 'Google Bridge Web App URL or Action missing',
+    }
+  }
+
+  const templateData = getTemplateData(context)
+  const templatedUrl = applyTemplate(webAppUrl, templateData)
+  const templatedAction = applyTemplate(action, templateData)
+  const templatedPayload = payload
+    ? resolveTemplates(payload, templateData)
+    : {}
+
+  const postBody = {
+    action: templatedAction,
+    payload: templatedPayload,
+  }
+
+  const maxRetries = 5
+  const retryDelays = [1000, 5000, 30000, 120000, 600000]
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      if (attempt > 0)
+        await new Promise((resolve) =>
+          setTimeout(resolve, retryDelays[attempt - 1])
+        )
+
+      const response = await axios.post(templatedUrl, postBody, {
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (response.status >= 200 && response.status < 300) {
+        return {
+          success: true,
+          message: `Google Bridge successful for action: ${templatedAction}`,
+          data: response.data as Record<string, unknown>,
+        }
+      } else {
+        throw new Error(`Google Bridge failed with status: ${response.status}`)
+      }
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError
+      const status = axiosError.response?.status
+      const isRetryable =
+        (status && (status >= 500 || status === 429)) || !axiosError.response
+
+      if (isRetryable && attempt < maxRetries - 1) continue
+      return {
+        success: false,
+        message: `Google Bridge action failed: ${getErrorMessage(error)}`,
+      }
+    }
+  }
+
+  return {
+    success: false,
+    message: 'Google Bridge action failed after max retries',
   }
 }
 
@@ -459,6 +682,20 @@ export const executeWorkflow = async (
               ...actionResult.extractedVariables,
             }
           }
+          break
+        }
+        case 'action-regex-replace': {
+          actionResult = await executeRegexReplaceAction(node, currentContext)
+          if (actionResult.success && actionResult.extractedVariables) {
+            currentContext.data = {
+              ...currentContext.data,
+              ...actionResult.extractedVariables,
+            }
+          }
+          break
+        }
+        case 'action-google-bridge': {
+          actionResult = await executeGoogleBridgeAction(node, currentContext)
           break
         }
         case 'condition': {

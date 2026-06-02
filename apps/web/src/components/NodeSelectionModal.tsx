@@ -45,6 +45,18 @@ const NODE_TYPES: NodeType[] = [
     description: 'Generic HTTP API request.',
     category: 'Action',
   },
+  {
+    type: 'action-regex-replace',
+    label: 'Regex Replace',
+    description: 'Clean or format text via regular expressions.',
+    category: 'Action',
+  },
+  {
+    type: 'action-google-bridge',
+    label: 'Google Bridge',
+    description: 'Interact with Google Apps Script Webhook.',
+    category: 'Action',
+  },
 ]
 
 type Category = 'All' | 'Trigger' | 'Action' | 'Logic'

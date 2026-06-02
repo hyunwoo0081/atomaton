@@ -64,6 +64,24 @@ export interface HttpActionConfig extends BaseNodeConfig {
   responseMapping?: HttpResponseMapping[]
 }
 
+export interface RegexReplaceRule {
+  pattern: string
+  replacement: string
+  flags?: string
+}
+
+export interface RegexReplaceActionConfig extends BaseNodeConfig {
+  inputText?: string
+  rules?: RegexReplaceRule[]
+  outputVariable?: string
+}
+
+export interface GoogleBridgeActionConfig extends BaseNodeConfig {
+  webAppUrl?: string
+  action?: string
+  payload?: string | Record<string, unknown>
+}
+
 export type NodeConfig =
   | TriggerNodeConfig
   | WebhookTriggerNodeConfig
@@ -71,6 +89,8 @@ export type NodeConfig =
   | NotionActionConfig
   | ConditionNodeConfig
   | HttpActionConfig
+  | RegexReplaceActionConfig
+  | GoogleBridgeActionConfig
 
 // --- Custom Node Data for React Flow ---
 export interface CustomNodeData {

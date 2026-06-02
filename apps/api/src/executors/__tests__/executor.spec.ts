@@ -1,19 +1,32 @@
 // apps/api/src/executors/__tests__/executor.spec.ts
 process.env.MASTER_KEY = 'this_is_a_32_byte_test_key_!!!!'
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import axios from 'axios'
 import {
   applyTemplate,
   executeCondition,
   splitDiscordMessage,
   resolveTemplates,
+  executeRegexReplaceAction,
+  executeGoogleBridgeAction,
 } from '../executor'
 import {
   WorkflowContext,
   WorkflowNode,
   ConditionConfig,
   ActionConfig,
+  RegexReplaceActionConfig,
+  GoogleBridgeActionConfig,
 } from '../types'
+
+vi.mock('axios', () => {
+  return {
+    default: {
+      post: vi.fn(),
+    },
+  }
+})
 
 describe('Executor Utilities', () => {
   describe('applyTemplate', () => {
@@ -202,6 +215,227 @@ describe('Executor Utilities', () => {
       })
       const result = await executeCondition(node, mockContext)
       expect(result.data?.result).toBe(false)
+    })
+
+    it('should resolve nested paths inside results or data correctly', async () => {
+      const contextWithResults: WorkflowContext = {
+        ...mockContext,
+        results: {
+          node1: {
+            success: true,
+            message: 'Done',
+            data: { status: 'approved', count: 123 },
+          },
+        },
+      }
+      const node = createConditionNode({
+        conditions: [
+          {
+            field: 'results.node1.data.status',
+            operator: 'equals',
+            value: 'approved',
+          },
+          { field: 'data.status', operator: 'equals', value: 'pending' },
+        ],
+        logicType: 'AND',
+      })
+      const result = await executeCondition(node, contextWithResults)
+      expect(result.data?.result).toBe(true)
+    })
+
+    it('should check startsWith and endsWith operators correctly', async () => {
+      const node = createConditionNode({
+        conditions: [
+          { field: 'subject', operator: 'startsWith', value: 'Urgent' },
+          { field: 'subject', operator: 'endsWith', value: 'Payment' },
+        ],
+        logicType: 'AND',
+      })
+      const result = await executeCondition(node, mockContext)
+      expect(result.data?.result).toBe(true)
+    })
+
+    it('should check regex operator correctly', async () => {
+      const node = createConditionNode({
+        conditions: [
+          { field: 'subject', operator: 'regex', value: 'Urgent\\s\\w+' },
+        ],
+        logicType: 'AND',
+      })
+      const result = await executeCondition(node, mockContext)
+      expect(result.data?.result).toBe(true)
+    })
+
+    it('should check numeric gt, gte, lt, lte operators correctly', async () => {
+      const nodeGt = createConditionNode({
+        conditions: [{ field: 'amount', operator: 'gt', value: '49999' }],
+      })
+      const nodeLt = createConditionNode({
+        conditions: [{ field: 'amount', operator: 'lt', value: '50001' }],
+      })
+      const resultGt = await executeCondition(nodeGt, mockContext)
+      const resultLt = await executeCondition(nodeLt, mockContext)
+      expect(resultGt.data?.result).toBe(true)
+      expect(resultLt.data?.result).toBe(true)
+    })
+
+    it('should check isEmpty and isNotEmpty operators correctly', async () => {
+      const contextWithEmpty: WorkflowContext = {
+        ...mockContext,
+        data: {
+          emptyStr: '',
+          nonEmptyStr: 'hello',
+          emptyArr: [],
+          emptyObj: {},
+          nullVal: null,
+        },
+      }
+      const node = createConditionNode({
+        conditions: [
+          { field: 'emptyStr', operator: 'isEmpty' },
+          { field: 'nonEmptyStr', operator: 'isNotEmpty' },
+          { field: 'emptyArr', operator: 'isEmpty' },
+          { field: 'emptyObj', operator: 'isEmpty' },
+          { field: 'nullVal', operator: 'isEmpty' },
+          { field: 'nonExistent', operator: 'isEmpty' },
+        ],
+        logicType: 'AND',
+      })
+      const result = await executeCondition(node, contextWithEmpty)
+      expect(result.data?.result).toBe(true)
+    })
+
+    it('should support dynamic templated comparison values', async () => {
+      const contextDynamic: WorkflowContext = {
+        ...mockContext,
+        data: {
+          username: 'alice',
+          expectedUser: 'alice',
+        },
+      }
+      const node = createConditionNode({
+        conditions: [
+          {
+            field: 'username',
+            operator: 'equals',
+            value: '{{data.expectedUser}}',
+          },
+        ],
+      })
+      const result = await executeCondition(node, contextDynamic)
+      expect(result.data?.result).toBe(true)
+    })
+  })
+
+  describe('executeRegexReplaceAction', () => {
+    it('should perform sequential regex replacement', async () => {
+      const node: WorkflowNode = {
+        id: 'regex-1',
+        type: 'action-regex-replace',
+        data: {
+          label: 'Test Regex',
+          config: {
+            inputText: 'Error: Database connection failed. Please retry.',
+            rules: [
+              { pattern: 'Error:\\s', replacement: '' },
+              { pattern: 'failed', replacement: 'succeeded' },
+            ],
+            outputVariable: 'cleanMsg',
+          } as RegexReplaceActionConfig,
+        },
+      }
+
+      const context: WorkflowContext = {
+        workflowId: 'wf1',
+        triggerId: 'tr1',
+        executionId: 'ex1',
+        data: {},
+        results: {},
+      }
+
+      const result = await executeRegexReplaceAction(node, context)
+      expect(result.success).toBe(true)
+      expect(result.extractedVariables?.cleanMsg).toBe(
+        'Database connection succeeded. Please retry.'
+      )
+    })
+
+    it('should support templates inside input and replacement', async () => {
+      const node: WorkflowNode = {
+        id: 'regex-1',
+        type: 'action-regex-replace',
+        data: {
+          label: 'Test Regex',
+          config: {
+            inputText: 'Hello {{data.name}}',
+            rules: [
+              { pattern: 'Hello', replacement: 'Goodbye {{data.prefix}}' },
+            ],
+            outputVariable: 'greeting',
+          } as RegexReplaceActionConfig,
+        },
+      }
+
+      const context: WorkflowContext = {
+        workflowId: 'wf1',
+        triggerId: 'tr1',
+        executionId: 'ex1',
+        data: { name: 'Alice', prefix: 'Dr.' },
+        results: {},
+      }
+
+      const result = await executeRegexReplaceAction(node, context)
+      expect(result.success).toBe(true)
+      expect(result.extractedVariables?.greeting).toBe('Goodbye Dr. Alice')
+    })
+  })
+
+  describe('executeGoogleBridgeAction', () => {
+    it('should call the GAS web app with correct action and payload', async () => {
+      const node: WorkflowNode = {
+        id: 'bridge-1',
+        type: 'action-google-bridge',
+        data: {
+          label: 'Test Google Bridge',
+          config: {
+            webAppUrl: 'https://script.google.com/macros/s/123/exec',
+            action: 'APPEND_ROW',
+            payload: {
+              spreadsheetId: 'sheet123',
+              rowValues: ['{{data.val1}}', '{{data.val2}}'],
+            },
+          } as GoogleBridgeActionConfig,
+        },
+      }
+
+      const context: WorkflowContext = {
+        workflowId: 'wf1',
+        triggerId: 'tr1',
+        executionId: 'ex1',
+        data: { val1: 'foo', val2: 'bar' },
+        results: {},
+      }
+
+      const mockResponse = {
+        status: 200,
+        data: { success: true, message: 'Done' },
+      }
+      vi.mocked(axios.post).mockResolvedValueOnce(mockResponse)
+
+      const result = await executeGoogleBridgeAction(node, context)
+      expect(result.success).toBe(true)
+      expect(result.data).toEqual({ success: true, message: 'Done' })
+      expect(axios.post).toHaveBeenCalledWith(
+        'https://script.google.com/macros/s/123/exec',
+        {
+          action: 'APPEND_ROW',
+          payload: {
+            spreadsheetId: 'sheet123',
+            rowValues: ['foo', 'bar'],
+          },
+        },
+        expect.any(Object)
+      )
     })
   })
 })

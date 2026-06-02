@@ -53,8 +53,19 @@ export interface NotionActionConfig {
 
 export interface ConditionRule {
   field: string
-  operator: 'contains' | 'equals'
-  value: string
+  operator:
+    | 'contains'
+    | 'equals'
+    | 'startsWith'
+    | 'endsWith'
+    | 'regex'
+    | 'gt'
+    | 'gte'
+    | 'lt'
+    | 'lte'
+    | 'isEmpty'
+    | 'isNotEmpty'
+  value?: string
 }
 
 export interface ConditionConfig {
@@ -75,11 +86,31 @@ export interface HttpActionConfig {
   responseMapping?: HttpResponseMapping[]
 }
 
+export interface RegexReplaceRule {
+  pattern: string
+  replacement: string
+  flags?: string
+}
+
+export interface RegexReplaceActionConfig {
+  inputText: string
+  rules: RegexReplaceRule[]
+  outputVariable: string
+}
+
+export interface GoogleBridgeActionConfig {
+  webAppUrl: string
+  action: string
+  payload?: Record<string, unknown>
+}
+
 export type ActionConfig =
   | DiscordActionConfig
   | NotionActionConfig
   | ConditionConfig
   | HttpActionConfig
+  | RegexReplaceActionConfig
+  | GoogleBridgeActionConfig
   | Record<string, unknown>
 
 export interface GlobalSettings {
