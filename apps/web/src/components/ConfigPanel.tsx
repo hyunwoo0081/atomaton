@@ -3,6 +3,8 @@ import { Button, Input } from '@atomaton/ui'
 import { api } from '../utils/api'
 import { useQuery } from '@tanstack/react-query'
 import { AccountConnectionModal } from './AccountConnectionModal'
+import { useWorkflowStore } from '../store/workflowStore'
+import { VariablePicker } from './VariablePicker'
 import type {
   NodeConfig,
   TriggerNodeConfig,
@@ -70,98 +72,6 @@ const AccountSelect: React.FC<{
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       />
-    </div>
-  )
-}
-
-const extractJsonPaths = (obj: unknown, prefix = ''): string[] => {
-  if (obj === null || obj === undefined) return []
-  let paths: string[] = []
-
-  if (Array.isArray(obj)) {
-    if (obj.length === 0) {
-      paths.push(`${prefix}[]`)
-    } else {
-      const firstItem = obj[0]
-      if (typeof firstItem === 'object' && firstItem !== null) {
-        paths = [...paths, ...extractJsonPaths(firstItem, `${prefix}[0]`)]
-      } else {
-        paths.push(`${prefix}[0]`)
-      }
-    }
-  } else if (typeof obj === 'object') {
-    const typedObj = obj as Record<string, unknown>
-    for (const key in typedObj) {
-      if (Object.prototype.hasOwnProperty.call(typedObj, key)) {
-        const value = typedObj[key]
-        const currentPath = prefix ? `${prefix}.${key}` : key
-        if (typeof value === 'object' && value !== null) {
-          paths = [...paths, ...extractJsonPaths(value, currentPath)]
-        } else {
-          paths.push(currentPath)
-        }
-      }
-    }
-  } else {
-    paths.push(prefix)
-  }
-
-  return paths
-}
-
-const VariablePicker: React.FC<{
-  triggerType?: string
-  triggerConfig?: NodeConfig
-  onSelect: (variable: string) => void
-}> = ({ triggerType, triggerConfig, onSelect }) => {
-  let variables: string[] = []
-  let infoMessage: string | null = null
-
-  if (triggerType === 'trigger-webhook') {
-    const payloadStr = (triggerConfig as WebhookTriggerNodeConfig)
-      ?.samplePayload
-    if (payloadStr) {
-      try {
-        const parsed = JSON.parse(payloadStr)
-        const paths = extractJsonPaths(parsed)
-        variables = paths.map((p) => `{{${p}}}`)
-      } catch {
-        infoMessage = 'Invalid Sample JSON Payload in Webhook trigger.'
-      }
-    }
-
-    if (variables.length === 0 && !infoMessage) {
-      variables = ['{{subject}}', '{{amount}}', '{{status}}']
-      infoMessage =
-        'Paste a Sample JSON Payload in your Webhook Trigger to unlock custom fields.'
-    }
-  } else {
-    // Default IMAP Email Trigger
-    variables = ['{{subject}}', '{{from}}', '{{date}}', '{{body}}']
-  }
-
-  return (
-    <div className="flex flex-col gap-1 mt-3">
-      <span className="text-[10px] text-white/40">
-        Suggested variables from Trigger:
-      </span>
-      {infoMessage && (
-        <span className="text-[9px] text-amber-400/80 italic mb-1 leading-snug">
-          {infoMessage}
-        </span>
-      )}
-      <div className="flex flex-wrap gap-2 mt-1">
-        {variables.map((v) => (
-          <button
-            key={v}
-            type="button"
-            className="px-3 py-1 text-xs bg-white/10 hover:bg-white/20 rounded-full border border-white/10 text-white/80 transition-all font-mono"
-            onClick={() => onSelect(v)}
-          >
-            {v}
-          </button>
-        ))}
-      </div>
     </div>
   )
 }
@@ -303,6 +213,7 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
   const [config, setConfig] = useState<NodeConfig>(
     initialConfig || ({} as NodeConfig)
   )
+  const { nodes, edges } = useWorkflowStore()
 
   useEffect(() => {
     // Only update if the config or node really changed
@@ -725,6 +636,17 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
               onChange={(e) => handleChange('url', e.target.value)}
               placeholder="https://api.example.com/..."
             />
+            <VariablePicker
+              currentNodeId={nodeId}
+              nodes={nodes}
+              edges={edges}
+              onSelect={(v) =>
+                handleChange(
+                  'url',
+                  ((config as HttpActionConfig).url || '') + v
+                )
+              }
+            />
           </>
         )}
 
@@ -741,6 +663,14 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
                   value={regexConfig.inputText || ''}
                   onChange={(e) => handleChange('inputText', e.target.value)}
                   placeholder="e.g. {{trigger.body}}"
+                />
+                <VariablePicker
+                  currentNodeId={nodeId}
+                  nodes={nodes}
+                  edges={edges}
+                  onSelect={(v) =>
+                    handleChange('inputText', (regexConfig.inputText || '') + v)
+                  }
                 />
                 <div className="flex flex-col mb-4">
                   <label className="mb-2 text-sm font-medium text-[#00F5A0] text-xs uppercase tracking-wider font-bold">
@@ -926,6 +856,23 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
                     }
                     return null
                   })()}
+                  <VariablePicker
+                    currentNodeId={nodeId}
+                    nodes={nodes}
+                    edges={edges}
+                    onSelect={(v) => {
+                      const currentVal =
+                        typeof googleConfig.payload === 'object'
+                          ? JSON.stringify(googleConfig.payload, null, 2)
+                          : (googleConfig.payload as string) || ''
+                      const newVal = currentVal + v
+                      try {
+                        handleChange('payload', JSON.parse(newVal))
+                      } catch {
+                        handleChange('payload', newVal)
+                      }
+                    }}
+                  />
                   <div className="mt-2 text-xs space-y-1">
                     <span className="text-white/40 block">
                       Suggested Template Actions:
@@ -1082,6 +1029,14 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
                   onChange={(e) => handleChange('inputText', e.target.value)}
                   placeholder="e.g. {{trigger.body}}"
                 />
+                <VariablePicker
+                  currentNodeId={nodeId}
+                  nodes={nodes}
+                  edges={edges}
+                  onSelect={(v) =>
+                    handleChange('inputText', (urlConfig.inputText || '') + v)
+                  }
+                />
                 <Input
                   label="Output Variable Name"
                   value={urlConfig.outputVariable || ''}
@@ -1116,8 +1071,9 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 placeholder="Hello {{subject}}!"
               />
               <VariablePicker
-                triggerType={triggerType}
-                triggerConfig={triggerConfig}
+                currentNodeId={nodeId}
+                nodes={nodes}
+                edges={edges}
                 onSelect={(v) =>
                   handleChange(
                     'content',
