@@ -89,6 +89,34 @@ export const Sidebar: React.FC<{
         >
           Notion Page
         </div>
+        <div
+          className="p-3 bg-white/5 border border-white/10 rounded-xl cursor-grab mb-2 hover:bg-white/10 hover:border-[#00F5A0]/50 transition-all text-white text-sm"
+          onDragStart={(event) => onDragStart(event, 'action-http')}
+          draggable
+        >
+          HTTP Request
+        </div>
+        <div
+          className="p-3 bg-white/5 border border-white/10 rounded-xl cursor-grab mb-2 hover:bg-white/10 hover:border-[#00F5A0]/50 transition-all text-white text-sm"
+          onDragStart={(event) => onDragStart(event, 'action-regex-replace')}
+          draggable
+        >
+          Regex Replace
+        </div>
+        <div
+          className="p-3 bg-white/5 border border-white/10 rounded-xl cursor-grab mb-2 hover:bg-white/10 hover:border-[#00F5A0]/50 transition-all text-white text-sm"
+          onDragStart={(event) => onDragStart(event, 'action-google-bridge')}
+          draggable
+        >
+          Google Bridge
+        </div>
+        <div
+          className="p-3 bg-white/5 border border-white/10 rounded-xl cursor-grab mb-2 hover:bg-white/10 hover:border-[#00F5A0]/50 transition-all text-white text-sm"
+          onDragStart={(event) => onDragStart(event, 'action-url-decode')}
+          draggable
+        >
+          URL Decode
+        </div>
       </div>
 
       <GlobalSettingsModal
