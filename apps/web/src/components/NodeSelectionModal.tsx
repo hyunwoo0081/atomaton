@@ -57,6 +57,12 @@ const NODE_TYPES: NodeType[] = [
     description: 'Interact with Google Apps Script Webhook.',
     category: 'Action',
   },
+  {
+    type: 'action-url-decode',
+    label: 'URL Decode',
+    description: 'Find and decode URL-encoded links in text.',
+    category: 'Action',
+  },
 ]
 
 type Category = 'All' | 'Trigger' | 'Action' | 'Logic'

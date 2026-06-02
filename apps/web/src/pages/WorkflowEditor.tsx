@@ -75,6 +75,9 @@ const WorkflowEditorContent: React.FC = () => {
       action: ActionNode,
       'action-notion': ActionNode,
       'action-http': ActionNode,
+      'action-regex-replace': ActionNode,
+      'action-google-bridge': ActionNode,
+      'action-url-decode': ActionNode,
       condition: ConditionNode,
     }),
     []

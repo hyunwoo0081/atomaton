@@ -82,6 +82,20 @@ export interface GoogleBridgeActionConfig extends BaseNodeConfig {
   payload?: string | Record<string, unknown>
 }
 
+export interface UrlDecodeActionConfig extends BaseNodeConfig {
+  inputText?: string
+  outputVariable?: string
+}
+
+export type ActionConfig =
+  | DiscordActionConfig
+  | NotionActionConfig
+  | ConditionNodeConfig
+  | HttpActionConfig
+  | RegexReplaceActionConfig
+  | GoogleBridgeActionConfig
+  | UrlDecodeActionConfig
+
 export type NodeConfig =
   | TriggerNodeConfig
   | WebhookTriggerNodeConfig
@@ -91,6 +105,7 @@ export type NodeConfig =
   | HttpActionConfig
   | RegexReplaceActionConfig
   | GoogleBridgeActionConfig
+  | UrlDecodeActionConfig
 
 // --- Custom Node Data for React Flow ---
 export interface CustomNodeData {

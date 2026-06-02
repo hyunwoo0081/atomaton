@@ -14,6 +14,7 @@ import type {
   WebhookTriggerNodeConfig,
   RegexReplaceActionConfig,
   GoogleBridgeActionConfig,
+  UrlDecodeActionConfig,
 } from '../types/workflow'
 
 interface ConfigPanelProps {
@@ -1063,6 +1064,32 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
                     </Button>
                   </div>
                 </div>
+              </>
+            )
+          })()}
+
+        {nodeType === 'action-url-decode' &&
+          (() => {
+            const urlConfig = config as UrlDecodeActionConfig
+            return (
+              <>
+                <h3 className="font-bold text-lg text-[#00F5A0] border-b border-white/10 pb-2">
+                  URL Decode
+                </h3>
+                <Input
+                  label="Input Text"
+                  value={urlConfig.inputText || ''}
+                  onChange={(e) => handleChange('inputText', e.target.value)}
+                  placeholder="e.g. {{trigger.body}}"
+                />
+                <Input
+                  label="Output Variable Name"
+                  value={urlConfig.outputVariable || ''}
+                  onChange={(e) =>
+                    handleChange('outputVariable', e.target.value)
+                  }
+                  placeholder="e.g. decoded_body"
+                />
               </>
             )
           })()}
