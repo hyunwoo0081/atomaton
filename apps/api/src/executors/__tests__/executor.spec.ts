@@ -10,6 +10,7 @@ import {
   resolveTemplates,
   executeRegexReplaceAction,
   executeGoogleBridgeAction,
+  executeUrlDecodeAction,
 } from '../executor'
 import {
   WorkflowContext,
@@ -18,6 +19,7 @@ import {
   ActionConfig,
   RegexReplaceActionConfig,
   GoogleBridgeActionConfig,
+  UrlDecodeActionConfig,
 } from '../types'
 
 vi.mock('axios', () => {
@@ -136,7 +138,16 @@ describe('Executor Utilities', () => {
       expect(result).toEqual(['Line 1', 'Line 2', 'Line 3'])
     })
 
-    it('should slice extremely long single lines without breaks', () => {
+    it('should split intelligently by double newlines, newlines, sentence ends, and spaces', () => {
+      const content =
+        'First Paragraph.\n\nSecond paragraph that is slightly longer. It has multiple sentences. And some words.'
+      const result = splitDiscordMessage(content, 50)
+      expect(result[0]).toBe('First Paragraph.')
+      expect(result[1]).toBe('Second paragraph that is slightly longer.')
+      expect(result[2]).toBe('It has multiple sentences. And some words.')
+    })
+
+    it('should slice extremely long single words/lines as a fallback', () => {
       const content = '12345678901234567890'
       const result = splitDiscordMessage(content, 5)
       expect(result).toEqual(['12345', '67890', '12345', '67890'])
@@ -435,6 +446,37 @@ describe('Executor Utilities', () => {
           },
         },
         expect.any(Object)
+      )
+    })
+  })
+
+  describe('executeUrlDecodeAction', () => {
+    it('should find and decode URL-encoded links in text', async () => {
+      const node: WorkflowNode = {
+        id: 'url-1',
+        type: 'action-url-decode',
+        data: {
+          label: 'Test URL Decode',
+          config: {
+            inputText:
+              'Link 1: https://example.com/search?q=%EB%B0%A9%EA%B2%BD and Link 2: http://test.com/path%20to%20file',
+            outputVariable: 'decodedText',
+          } as UrlDecodeActionConfig,
+        },
+      }
+
+      const context: WorkflowContext = {
+        workflowId: 'wf1',
+        triggerId: 'tr1',
+        executionId: 'ex1',
+        data: {},
+        results: {},
+      }
+
+      const result = await executeUrlDecodeAction(node, context)
+      expect(result.success).toBe(true)
+      expect(result.extractedVariables?.decodedText).toBe(
+        'Link 1: https://example.com/search?q=방경 and Link 2: http://test.com/path to file'
       )
     })
   })

@@ -104,6 +104,11 @@ export interface GoogleBridgeActionConfig {
   payload?: Record<string, unknown>
 }
 
+export interface UrlDecodeActionConfig {
+  inputText: string
+  outputVariable: string
+}
+
 export type ActionConfig =
   | DiscordActionConfig
   | NotionActionConfig
@@ -111,6 +116,7 @@ export type ActionConfig =
   | HttpActionConfig
   | RegexReplaceActionConfig
   | GoogleBridgeActionConfig
+  | UrlDecodeActionConfig
   | Record<string, unknown>
 
 export interface GlobalSettings {

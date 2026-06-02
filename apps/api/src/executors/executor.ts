@@ -12,6 +12,7 @@ import {
   WorkflowData,
   RegexReplaceActionConfig,
   GoogleBridgeActionConfig,
+  UrlDecodeActionConfig,
 } from './types'
 import prisma, { Prisma, decrypt } from '@atomaton/db'
 import axios, { AxiosError } from 'axios'
@@ -73,37 +74,65 @@ export const splitDiscordMessage = (
   if (content.length <= limit) return [content]
 
   const chunks: string[] = []
-  const lines = content.split('\n')
-  let currentChunk = ''
+  let remaining = content
 
-  for (const line of lines) {
-    if (line.length > limit) {
-      if (currentChunk.trim()) {
-        chunks.push(currentChunk)
-        currentChunk = ''
-      }
-      let remainingLine = line
-      while (remainingLine.length > limit) {
-        chunks.push(remainingLine.substring(0, limit))
-        remainingLine = remainingLine.substring(limit)
-      }
-      currentChunk = remainingLine
-    } else {
-      const separator = currentChunk ? '\n' : ''
-      if (currentChunk.length + separator.length + line.length > limit) {
-        chunks.push(currentChunk)
-        currentChunk = line
-      } else {
-        currentChunk += separator + line
+  while (remaining.length > 0) {
+    if (remaining.length <= limit) {
+      chunks.push(remaining)
+      break
+    }
+
+    const slice = remaining.substring(0, limit + 1)
+
+    // Delimiter 1: Paragraph boundary '\n\n'
+    let splitIdx = slice.lastIndexOf('\n\n')
+    if (splitIdx > 0) {
+      chunks.push(remaining.substring(0, splitIdx).trim())
+      remaining = remaining.substring(splitIdx + 2)
+      continue
+    }
+
+    // Delimiter 2: Line boundary '\n'
+    splitIdx = slice.lastIndexOf('\n')
+    if (splitIdx > 0) {
+      chunks.push(remaining.substring(0, splitIdx).trim())
+      remaining = remaining.substring(splitIdx + 1)
+      continue
+    }
+
+    // Delimiter 3: Sentence boundary '. ', '? ', '! '
+    let sentenceIdx = -1
+    for (let i = limit; i > 0; i--) {
+      const char = remaining[i]
+      const prevChar = remaining[i - 1]
+      if (
+        (prevChar === '.' || prevChar === '?' || prevChar === '!') &&
+        char === ' '
+      ) {
+        sentenceIdx = i
+        break
       }
     }
+    if (sentenceIdx > 0) {
+      chunks.push(remaining.substring(0, sentenceIdx).trim())
+      remaining = remaining.substring(sentenceIdx + 1)
+      continue
+    }
+
+    // Delimiter 4: Word boundary (space)
+    splitIdx = slice.lastIndexOf(' ')
+    if (splitIdx > 0) {
+      chunks.push(remaining.substring(0, splitIdx).trim())
+      remaining = remaining.substring(splitIdx + 1)
+      continue
+    }
+
+    // Delimiter 5: Hard split
+    chunks.push(remaining.substring(0, limit))
+    remaining = remaining.substring(limit)
   }
 
-  if (currentChunk.trim()) {
-    chunks.push(currentChunk)
-  }
-
-  return chunks
+  return chunks.filter((c) => c.length > 0)
 }
 
 export const resolvePath = (
@@ -626,6 +655,38 @@ export const executeGoogleBridgeAction = async (
   }
 }
 
+export const executeUrlDecodeAction = async (
+  node: WorkflowNode,
+  context: WorkflowContext
+): Promise<ActionResult> => {
+  const config = node.data.config as UrlDecodeActionConfig
+  const { inputText, outputVariable } = config
+  if (!outputVariable) {
+    return { success: false, message: 'Output variable name missing' }
+  }
+
+  const templateData = getTemplateData(context)
+  const resolvedText = applyTemplate(inputText || '', templateData)
+
+  const urlRegex = /(https?:\/\/[^\s]+)/g
+  const decodedText = resolvedText.replace(urlRegex, (url) => {
+    try {
+      return decodeURIComponent(url)
+    } catch {
+      return url
+    }
+  })
+
+  return {
+    success: true,
+    message: 'URL decode successful',
+    data: { result: decodedText },
+    extractedVariables: {
+      [outputVariable]: decodedText,
+    },
+  }
+}
+
 export const executeWorkflow = async (
   context: WorkflowContext,
   overrideWorkflowData?: UIConfig
@@ -696,6 +757,16 @@ export const executeWorkflow = async (
         }
         case 'action-google-bridge': {
           actionResult = await executeGoogleBridgeAction(node, currentContext)
+          break
+        }
+        case 'action-url-decode': {
+          actionResult = await executeUrlDecodeAction(node, currentContext)
+          if (actionResult.success && actionResult.extractedVariables) {
+            currentContext.data = {
+              ...currentContext.data,
+              ...actionResult.extractedVariables,
+            }
+          }
           break
         }
         case 'condition': {
