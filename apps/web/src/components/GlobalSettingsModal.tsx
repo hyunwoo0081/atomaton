@@ -38,7 +38,7 @@ export const GlobalSettingsModal: React.FC<GlobalSettingsModalProps> = ({
       ref={dialogRef}
       onClose={onClose}
       onClick={handleBackdropClick}
-      className="border-0 bg-transparent p-0 outline-none backdrop:bg-black/50 backdrop:backdrop-blur-sm"
+      className="fixed inset-0 m-auto border-0 bg-transparent p-0 outline-none backdrop:bg-black/50 backdrop:backdrop-blur-sm"
     >
       <div className="bg-[#0D0E12]/90 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl w-[500px] flex flex-col">
         <div className="p-6 border-b border-white/10 flex justify-between items-center">

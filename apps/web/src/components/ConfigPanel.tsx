@@ -214,6 +214,9 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
     initialConfig || ({} as NodeConfig)
   )
   const { nodes, edges } = useWorkflowStore()
+  const [selectedSampleType, setSelectedSampleType] = useState<
+    'curl' | 'node' | 'java' | 'gas_simple' | 'gas_gmail'
+  >('curl')
 
   useEffect(() => {
     // Only update if the config or node really changed
@@ -448,100 +451,167 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
 
                     <div className="flex flex-col mt-4 pt-4 border-t border-white/10">
                       <label className="mb-2 text-sm font-medium text-white/80">
-                        Sample Request (cURL)
+                        Sample Request Code
                       </label>
+                      <select
+                        className="w-full px-4 py-2 mb-3 bg-white/5 border border-white/10 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-[#8A3FFC] focus:border-transparent transition-all duration-200"
+                        value={selectedSampleType}
+                        onChange={(e) =>
+                          setSelectedSampleType(
+                            e.target.value as
+                              | 'curl'
+                              | 'node'
+                              | 'java'
+                              | 'gas_simple'
+                              | 'gas_gmail'
+                          )
+                        }
+                      >
+                        <option value="curl" className="bg-[#0D0E12]">
+                          cURL (Command Line)
+                        </option>
+                        <option value="node" className="bg-[#0D0E12]">
+                          Node.js (Fetch API)
+                        </option>
+                        <option value="java" className="bg-[#0D0E12]">
+                          Java (HttpClient)
+                        </option>
+                        <option value="gas_simple" className="bg-[#0D0E12]">
+                          Google Apps Script (Simple Fetch)
+                        </option>
+                        <option value="gas_gmail" className="bg-[#0D0E12]">
+                          Google Apps Script (Gmail Sync)
+                        </option>
+                      </select>
+
+                      {selectedSampleType === 'gas_gmail' && (
+                        <p className="text-[10px] text-white/50 mb-2 leading-relaxed">
+                          Copy this script into your Google Apps Script, set up
+                          a 1-minute time-driven trigger. It will monitor Gmail
+                          in real-time and post unread emails to this webhook,
+                          marking them read.
+                        </p>
+                      )}
+                      {selectedSampleType === 'gas_simple' && (
+                        <p className="text-[10px] text-white/50 mb-2 leading-relaxed">
+                          A simple Google Apps Script function to fetch and send
+                          data to this webhook trigger.
+                        </p>
+                      )}
+                      {selectedSampleType === 'node' && (
+                        <p className="text-[10px] text-white/50 mb-2 leading-relaxed">
+                          A modern JavaScript example using Fetch API to send a
+                          POST request.
+                        </p>
+                      )}
+                      {selectedSampleType === 'java' && (
+                        <p className="text-[10px] text-white/50 mb-2 leading-relaxed">
+                          A Java 11+ example using the built-in HttpClient to
+                          send a POST request.
+                        </p>
+                      )}
+
                       <div className="relative">
-                        <pre className="p-3 bg-[#0D0E12]/80 border border-[#0D0E12] rounded-xl text-[10px] text-[#00F5A0] font-mono overflow-x-auto whitespace-pre-wrap break-all leading-normal pr-12">
-                          {`curl -X POST "${window.location.origin}/api/webhook/${userId}/${triggerId}" \\
+                        <pre className="p-3 bg-[#0D0E12]/80 border border-[#0D0E12] rounded-xl text-[9px] text-[#00F5A0] font-mono overflow-x-auto whitespace-pre-wrap break-all leading-normal max-h-56 overflow-y-auto pr-12">
+                          {(() => {
+                            const webhookUrl = `${window.location.origin}/api/webhook/${userId}/${triggerId}`
+                            const apiKey =
+                              (config as WebhookTriggerNodeConfig).apiKey ||
+                              '<API_KEY>'
+
+                            switch (selectedSampleType) {
+                              case 'curl':
+                                return `curl -X POST "${webhookUrl}" \\
   -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${(config as WebhookTriggerNodeConfig).apiKey || '<API_KEY>'}" \\
-  -d '{
-    "subject": "Test Webhook",
-    "amount": 25000,
-    "status": "pending"
-  }'`}
-                        </pre>
-                        <Button
-                          variant="secondary"
-                          type="button"
-                          className="absolute right-2 top-2 !px-2 !py-0.5 text-[9px]"
-                          onClick={() => {
-                            const curlText = `curl -X POST "${window.location.origin}/api/webhook/${userId}/${triggerId}" \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${(config as WebhookTriggerNodeConfig).apiKey || '<API_KEY>'}" \\
+  -H "Authorization: Bearer ${apiKey}" \\
   -d '{
     "subject": "Test Webhook",
     "amount": 25000,
     "status": "pending"
   }'`
-                            navigator.clipboard.writeText(curlText)
-                            alert('Sample cURL copied!')
-                          }}
-                        >
-                          Copy
-                        </Button>
-                      </div>
-                    </div>
+                              case 'node':
+                                return `const webhookUrl = "${webhookUrl}";
+const apiKey = "${apiKey}";
 
-                    <div className="flex flex-col mt-4 pt-4 border-t border-white/10">
-                      <label className="mb-2 text-sm font-medium text-white/80">
-                        Google Apps Script (Gmail Real-time Sync)
-                      </label>
-                      <p className="text-[10px] text-white/50 mb-2 leading-relaxed">
-                        Copy this script into your Google Apps Script, set up a
-                        1-minute time-driven trigger. It will monitor Gmail in
-                        real-time and post unread emails to this webhook,
-                        marking them read.
-                      </p>
-                      <div className="relative">
-                        <pre className="p-3 bg-[#0D0E12]/80 border border-[#0D0E12] rounded-xl text-[9px] text-[#00F5A0] font-mono overflow-x-auto whitespace-pre-wrap break-all leading-normal max-h-40 overflow-y-auto pr-12">
-                          {`function monitorGmail() {
-  const query = "is:unread";
-  const webhookUrl = "${window.location.origin}/api/webhook/${userId}/${triggerId}";
+const payload = {
+  subject: "Test Webhook",
+  amount: 25000,
+  status: "pending"
+};
+
+fetch(webhookUrl, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": \`Bearer \${apiKey}\`
+  },
+  body: JSON.stringify(payload)
+})
+.then(response => response.json())
+.then(data => console.log("Success:", data))
+.catch(error => console.error("Error:", error));`
+                              case 'java':
+                                return `import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+public class WebhookSender {
+    public static void main(String[] args) {
+        String webhookUrl = "${webhookUrl}";
+        String apiKey = "${apiKey}";
+        String jsonPayload = "{\\"subject\\": \\"Test Webhook\\", \\"amount\\": 25000, \\"status\\": \\"pending\\"}";
+
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(webhookUrl))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println("Response Status Code: " + response.statusCode());
+            System.out.println("Response Body: " + response.body());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}`
+                              case 'gas_simple':
+                                return `function sendWebhook() {
+  const webhookUrl = "${webhookUrl}";
   const apiKey = "${(config as WebhookTriggerNodeConfig).apiKey || ''}";
   
-  const threads = GmailApp.search(query, 0, 10);
-  for (let i = 0; i < threads.length; i++) {
-    const messages = threads[i].getMessages();
-    for (let j = 0; j < messages.length; j++) {
-      const message = messages[j];
-      if (message.isUnread()) {
-        const payload = {
-          subject: message.getSubject(),
-          from: message.getFrom(),
-          date: message.getDate().toISOString(),
-          body: message.getPlainBody().substring(0, 1900)
-        };
-        
-        const options = {
-          method: "post",
-          contentType: "application/json",
-          headers: {
-            Authorization: "Bearer " + apiKey
-          },
-          payload: JSON.stringify(payload),
-          muteHttpExceptions: true
-        };
-        
-        try {
-          UrlFetchApp.fetch(webhookUrl, options);
-          message.markRead();
-        } catch (e) {
-          Logger.log("Error sending webhook: " + e.toString());
-        }
-      }
-    }
+  const payload = {
+    subject: "Test Webhook",
+    amount: 25000,
+    status: "pending"
+  };
+  
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      Authorization: "Bearer " + apiKey
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+  
+  try {
+    const response = UrlFetchApp.fetch(webhookUrl, options);
+    Logger.log("Response Code: " + response.getResponseCode());
+    Logger.log("Response Body: " + response.getContentText());
+  } catch (e) {
+    Logger.log("Error sending webhook: " + e.toString());
   }
-}`}
-                        </pre>
-                        <Button
-                          variant="secondary"
-                          type="button"
-                          className="absolute right-2 top-2 !px-2 !py-0.5 text-[9px]"
-                          onClick={() => {
-                            const scriptText = `function monitorGmail() {
+}`
+                              case 'gas_gmail':
+                                return `function monitorGmail() {
   const query = "is:unread";
-  const webhookUrl = "${window.location.origin}/api/webhook/${userId}/${triggerId}";
+  const webhookUrl = "${webhookUrl}";
   const apiKey = "${(config as WebhookTriggerNodeConfig).apiKey || ''}";
   
   const threads = GmailApp.search(query, 0, 10);
@@ -577,8 +647,159 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
     }
   }
 }`
-                            navigator.clipboard.writeText(scriptText)
-                            alert('GAS Gmail Sync Script copied to clipboard!')
+                              default:
+                                return ''
+                            }
+                          })()}
+                        </pre>
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          className="absolute right-2 top-2 !px-2 !py-0.5 text-[9px]"
+                          onClick={() => {
+                            const webhookUrl = `${window.location.origin}/api/webhook/${userId}/${triggerId}`
+                            const apiKey =
+                              (config as WebhookTriggerNodeConfig).apiKey ||
+                              '<API_KEY>'
+                            let codeText = ''
+
+                            switch (selectedSampleType) {
+                              case 'curl':
+                                codeText = `curl -X POST "${webhookUrl}" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -d '{
+    "subject": "Test Webhook",
+    "amount": 25000,
+    "status": "pending"
+  }'`
+                                break
+                              case 'node':
+                                codeText = `const webhookUrl = "${webhookUrl}";
+const apiKey = "${apiKey}";
+
+const payload = {
+  subject: "Test Webhook",
+  amount: 25000,
+  status: "pending"
+};
+
+fetch(webhookUrl, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": \`Bearer \${apiKey}\`
+  },
+  body: JSON.stringify(payload)
+})
+.then(response => response.json())
+.then(data => console.log("Success:", data))
+.catch(error => console.error("Error:", error));`
+                                break
+                              case 'java':
+                                codeText = `import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+public class WebhookSender {
+    public static void main(String[] args) {
+        String webhookUrl = "${webhookUrl}";
+        String apiKey = "${apiKey}";
+        String jsonPayload = "{\\"subject\\": \\"Test Webhook\\", \\"amount\\": 25000, \\"status\\": \\"pending\\"}";
+
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(webhookUrl))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println("Response Status Code: " + response.statusCode());
+            System.out.println("Response Body: " + response.body());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}`
+                                break
+                              case 'gas_simple':
+                                codeText = `function sendWebhook() {
+  const webhookUrl = "${webhookUrl}";
+  const apiKey = "${(config as WebhookTriggerNodeConfig).apiKey || ''}";
+  
+  const payload = {
+    subject: "Test Webhook",
+    amount: 25000,
+    status: "pending"
+  };
+  
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      Authorization: "Bearer " + apiKey
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+  
+  try {
+    const response = UrlFetchApp.fetch(webhookUrl, options);
+    Logger.log("Response Code: " + response.getResponseCode());
+    Logger.log("Response Body: " + response.getContentText());
+  } catch (e) {
+    Logger.log("Error sending webhook: " + e.toString());
+  }
+}`
+                                break
+                              case 'gas_gmail':
+                                codeText = `function monitorGmail() {
+  const query = "is:unread";
+  const webhookUrl = "${webhookUrl}";
+  const apiKey = "${(config as WebhookTriggerNodeConfig).apiKey || ''}";
+  
+  const threads = GmailApp.search(query, 0, 10);
+  for (let i = 0; i < threads.length; i++) {
+    const messages = threads[i].getMessages();
+    for (let j = 0; j < messages.length; j++) {
+      const message = messages[j];
+      if (message.isUnread()) {
+        const payload = {
+          subject: message.getSubject(),
+          from: message.getFrom(),
+          date: message.getDate().toISOString(),
+          body: message.getPlainBody().substring(0, 1900)
+        };
+        
+        const options = {
+          method: "post",
+          contentType: "application/json",
+          headers: {
+            Authorization: "Bearer " + apiKey
+          },
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true
+        };
+        
+        try {
+          UrlFetchApp.fetch(webhookUrl, options);
+          message.markRead();
+        } catch (e) {
+          Logger.log("Error sending webhook: " + e.toString());
+        }
+      }
+    }
+  }
+}`
+                                break
+                            }
+
+                            navigator.clipboard.writeText(codeText)
+                            alert('Sample code copied to clipboard!')
                           }}
                         >
                           Copy
