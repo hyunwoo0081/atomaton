@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from 'express'
 import {
   createWorkflow,
   getWorkflows,
@@ -6,18 +6,18 @@ import {
   updateWorkflow,
   deleteWorkflow,
   testWorkflow,
-} from '../controllers/workflow';
-import { authenticateToken } from '../middleware/auth';
+} from '../controllers/workflow'
+import { authenticateToken, validateWorkflowOwner } from '../middleware/auth'
 
-const router = Router();
+const router = Router()
 
-router.use(authenticateToken); // All workflow routes require authentication
+router.use(authenticateToken) // All workflow routes require authentication
 
-router.post('/', createWorkflow);
-router.get('/', getWorkflows);
-router.get('/:id', getWorkflowById);
-router.put('/:id', updateWorkflow);
-router.delete('/:id', deleteWorkflow);
-router.post('/:id/test', testWorkflow); // Add test route
+router.post('/', createWorkflow)
+router.get('/', getWorkflows)
+router.get('/:id', validateWorkflowOwner, getWorkflowById)
+router.put('/:id', validateWorkflowOwner, updateWorkflow)
+router.delete('/:id', validateWorkflowOwner, deleteWorkflow)
+router.post('/:id/test', validateWorkflowOwner, testWorkflow) // Add test route
 
-export default router;
+export default router

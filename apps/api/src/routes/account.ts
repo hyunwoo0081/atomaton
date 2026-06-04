@@ -1,21 +1,21 @@
-import { Router } from 'express';
+import { Router } from 'express'
 import {
   createAccount,
   getAccounts,
   getAccountById,
   updateAccount,
   deleteAccount,
-} from '../controllers/account';
-import { authenticateToken } from '../middleware/auth';
+} from '../controllers/account'
+import { authenticateToken, validateAccountOwner } from '../middleware/auth'
 
-const router = Router();
+const router = Router()
 
-router.use(authenticateToken); // All account routes require authentication
+router.use(authenticateToken) // All account routes require authentication
 
-router.post('/', createAccount);
-router.get('/', getAccounts);
-router.get('/:id', getAccountById);
-router.put('/:id', updateAccount);
-router.delete('/:id', deleteAccount);
+router.post('/', createAccount)
+router.get('/', getAccounts)
+router.get('/:id', validateAccountOwner, getAccountById)
+router.put('/:id', validateAccountOwner, updateAccount)
+router.delete('/:id', validateAccountOwner, deleteAccount)
 
-export default router;
+export default router

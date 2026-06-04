@@ -1,12 +1,12 @@
 // apps/api/src/routes/log.ts
-import { Router } from 'express';
-import { getLogs } from '../controllers/log';
-import { authenticateToken } from '../middleware/auth';
+import { Router } from 'express'
+import { getLogs } from '../controllers/log'
+import { authenticateToken, validateWorkflowOwner } from '../middleware/auth'
 
-const router = Router();
+const router = Router()
 
-router.use(authenticateToken);
+router.use(authenticateToken)
 
-router.get('/', getLogs);
+router.get('/', validateWorkflowOwner, getLogs)
 
-export default router;
+export default router
