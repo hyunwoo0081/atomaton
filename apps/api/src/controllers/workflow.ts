@@ -91,6 +91,68 @@ export const updateWorkflow = async (req: Request, res: Response) => {
 
   if (!userId) return res.status(401).json({ message: 'Unauthorized' })
 
+  if (nodes) {
+    const accountIds = new Set<string>()
+    for (const node of nodes) {
+      const config = node.data?.config as Record<string, unknown> | undefined
+      if (config && typeof config.accountId === 'string') {
+        accountIds.add(config.accountId)
+      }
+    }
+
+    if (accountIds.size > 0) {
+      const maxRetries = 5
+      const retryDelays = [1000, 5000, 30000, 120000, 600000]
+      let dbAccounts: { id: string; userId: string }[] = []
+
+      try {
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            if (attempt > 0) {
+              await new Promise((resolve) =>
+                setTimeout(resolve, retryDelays[attempt - 1])
+              )
+            }
+            dbAccounts = await prisma.account.findMany({
+              where: {
+                id: { in: Array.from(accountIds) },
+              },
+              select: {
+                id: true,
+                userId: true,
+              },
+            })
+            break
+          } catch (error) {
+            if (attempt < maxRetries - 1) continue
+            throw error
+          }
+        }
+      } catch (error) {
+        console.error(
+          'Error fetching integration accounts during validation:',
+          error
+        )
+        return res.status(500).json({ message: 'Internal server error' })
+      }
+
+      if (dbAccounts.length !== accountIds.size) {
+        return res
+          .status(403)
+          .json({ message: 'Forbidden: Invalid integration account' })
+      }
+      for (const acc of dbAccounts) {
+        if (acc.userId !== userId) {
+          return res
+            .status(403)
+            .json({
+              message: 'Forbidden: You do not own this integration account',
+            })
+        }
+      }
+    }
+  }
+
   try {
     const updateData: Prisma.WorkflowUpdateInput = {}
     if (name) updateData.name = name

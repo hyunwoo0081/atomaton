@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { getSystemStats, getUsers, createUser, deleteUser } from '../admin'
 import { Request, Response } from 'express'
-import bcrypt from 'bcryptjs'
 
 // Mock @atomaton/db
 vi.mock('@atomaton/db', () => {
@@ -26,7 +25,7 @@ vi.mock('@atomaton/db', () => {
   }
 })
 
-import prisma, { User } from '@atomaton/db'
+import prisma, { User, Log, Workflow } from '@atomaton/db'
 
 describe('Admin Controller', () => {
   let mockReq: Partial<Request>
@@ -46,16 +45,47 @@ describe('Admin Controller', () => {
     }
   })
 
-  describe('getUsers', () => {
-    it('should return 403 if user is not a developer', async () => {
-      mockReq = { isDeveloper: false }
-      await getUsers(mockReq as Request, mockRes as Response)
-      expect(statusMock).toHaveBeenCalledWith(403)
+  describe('getSystemStats', () => {
+    it('should return system stats successfully', async () => {
+      mockReq = {}
+      vi.mocked(prisma.user.count).mockResolvedValueOnce(5)
+      vi.mocked(prisma.workflow.count)
+        .mockResolvedValueOnce(10)
+        .mockResolvedValueOnce(3)
+      vi.mocked(prisma.log.findMany).mockResolvedValueOnce([
+        { status: 'SUCCESS' },
+        { status: 'SUCCESS' },
+        { status: 'FAILURE' },
+      ] as unknown as Log[])
+      vi.mocked(prisma.log.groupBy).mockResolvedValueOnce([
+        { workflowId: 'wf-1', _count: { status: 2 } },
+      ] as unknown as Awaited<ReturnType<typeof prisma.log.groupBy>>)
+      vi.mocked(prisma.workflow.findUnique).mockResolvedValueOnce({
+        id: 'wf-1',
+        name: 'Problematic Workflow',
+      } as unknown as Workflow)
+
+      await getSystemStats(mockReq as Request, mockRes as Response)
+      expect(statusMock).toHaveBeenCalledWith(200)
       expect(jsonMock).toHaveBeenCalledWith({
-        message: 'Access denied. Developer privileges required.',
+        overview: {
+          totalUsers: 5,
+          totalWorkflows: 10,
+          activeWorkflows: 3,
+          successRate: '66.7%',
+        },
+        problematicWorkflows: [
+          {
+            id: 'wf-1',
+            name: 'Problematic Workflow',
+            failureCount: 2,
+          },
+        ],
       })
     })
+  })
 
+  describe('getUsers', () => {
     it('should return users list on success', async () => {
       mockReq = { isDeveloper: true }
       const usersList = [
@@ -83,12 +113,6 @@ describe('Admin Controller', () => {
   })
 
   describe('createUser', () => {
-    it('should return 403 if user is not a developer', async () => {
-      mockReq = { isDeveloper: false, body: {} }
-      await createUser(mockReq as Request, mockRes as Response)
-      expect(statusMock).toHaveBeenCalledWith(403)
-    })
-
     it('should return 400 if email or password is missing', async () => {
       mockReq = { isDeveloper: true, body: { email: 'test@example.com' } }
       await createUser(mockReq as Request, mockRes as Response)
@@ -159,12 +183,6 @@ describe('Admin Controller', () => {
   })
 
   describe('deleteUser', () => {
-    it('should return 403 if user is not a developer', async () => {
-      mockReq = { isDeveloper: false, params: { id: 'u2' } }
-      await deleteUser(mockReq as Request, mockRes as Response)
-      expect(statusMock).toHaveBeenCalledWith(403)
-    })
-
     it('should return 400 if user tries to delete their own account', async () => {
       mockReq = {
         isDeveloper: true,

@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Request, Response, NextFunction } from 'express'
-import { validateWorkflowOwner, validateAccountOwner } from '../auth'
+import {
+  validateWorkflowOwner,
+  validateAccountOwner,
+  authorizeDeveloper,
+} from '../auth'
 
 // Mock @atomaton/db
 vi.mock('@atomaton/db', () => {
@@ -179,6 +183,33 @@ describe('Auth & Authorization Middleware', () => {
       } as unknown as Account)
 
       await validateAccountOwner(
+        mockReq as Request,
+        mockRes as Response,
+        nextMock
+      )
+      expect(nextMock).toHaveBeenCalled()
+      expect(statusMock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('authorizeDeveloper', () => {
+    it('should return 403 if user is not a developer', async () => {
+      mockReq = { isDeveloper: false }
+      await authorizeDeveloper(
+        mockReq as Request,
+        mockRes as Response,
+        nextMock
+      )
+      expect(statusMock).toHaveBeenCalledWith(403)
+      expect(jsonMock).toHaveBeenCalledWith({
+        message: 'Developer access required',
+      })
+      expect(nextMock).not.toHaveBeenCalled()
+    })
+
+    it('should call next if user is a developer', async () => {
+      mockReq = { isDeveloper: true }
+      await authorizeDeveloper(
         mockReq as Request,
         mockRes as Response,
         nextMock

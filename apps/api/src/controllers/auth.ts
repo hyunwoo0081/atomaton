@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import prisma, { Prisma } from '@atomaton/db'
+import prisma, { Prisma, User } from '@atomaton/db'
 
 // This should ideally come from environment variables
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretjwtkey'
@@ -14,20 +14,42 @@ export const register = async (req: Request, res: Response) => {
     return res.status(400).json({ message: 'Email and password are required' })
   }
 
+  const maxRetries = 5
+  const retryDelays = [1000, 5000, 30000, 120000, 600000]
+
   try {
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        is_developer: is_developer || false,
-      },
-    })
+    let user: User | null = null
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelays[attempt - 1])
+          )
+        }
+        user = await prisma.user.create({
+          data: {
+            email,
+            password: hashedPassword,
+            is_developer: is_developer || false,
+          },
+        })
+        break
+      } catch (error) {
+        if (attempt < maxRetries - 1) continue
+        throw error
+      }
+    }
+
+    const dbUser = user
+    if (!dbUser) {
+      return res.status(500).json({ message: 'Internal server error' })
+    }
 
     res
       .status(201)
-      .json({ message: 'User registered successfully', userId: user.id })
+      .json({ message: 'User registered successfully', userId: dbUser.id })
   } catch (error: unknown) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
@@ -47,21 +69,39 @@ export const login = async (req: Request, res: Response) => {
     return res.status(400).json({ message: 'Email and password are required' })
   }
 
-  try {
-    const user = await prisma.user.findUnique({ where: { email } })
+  const maxRetries = 5
+  const retryDelays = [1000, 5000, 30000, 120000, 600000]
 
-    if (!user) {
+  try {
+    let user: User | null = null
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelays[attempt - 1])
+          )
+        }
+        user = await prisma.user.findUnique({ where: { email } })
+        break
+      } catch (error) {
+        if (attempt < maxRetries - 1) continue
+        throw error
+      }
+    }
+
+    const dbUser = user
+    if (!dbUser) {
       return res.status(400).json({ message: 'Invalid credentials' })
     }
 
-    const isMatch = await bcrypt.compare(password, user.password)
+    const isMatch = await bcrypt.compare(password, dbUser.password)
 
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' })
     }
 
     const token = jwt.sign(
-      { userId: user.id, isDeveloper: user.is_developer },
+      { userId: dbUser.id, isDeveloper: dbUser.is_developer },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] }
     )
@@ -69,9 +109,9 @@ export const login = async (req: Request, res: Response) => {
     res.status(200).json({
       token,
       user: {
-        id: user.id,
-        email: user.email,
-        is_developer: user.is_developer,
+        id: dbUser.id,
+        email: dbUser.email,
+        is_developer: dbUser.is_developer,
       },
     })
   } catch (error) {
@@ -104,7 +144,7 @@ export const changePassword = async (req: Request, res: Response) => {
   const retryDelays = [1000, 5000, 30000, 120000, 600000]
 
   try {
-    let user = null
+    let user: User | null = null
 
     // Retrieve user from DB with retry logic
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -122,12 +162,13 @@ export const changePassword = async (req: Request, res: Response) => {
       }
     }
 
-    if (!user) {
+    const dbUser = user
+    if (!dbUser) {
       return res.status(404).json({ message: 'User not found' })
     }
 
     // Verify current password
-    const isMatch = await bcrypt.compare(currentPassword, user.password)
+    const isMatch = await bcrypt.compare(currentPassword, dbUser.password)
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid current password' })
     }
@@ -172,7 +213,7 @@ export const getMe = async (req: Request, res: Response) => {
   const retryDelays = [1000, 5000, 30000, 120000, 600000]
 
   try {
-    let user = null
+    let user: { id: string; email: string; is_developer: boolean } | null = null
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0) {
@@ -191,11 +232,12 @@ export const getMe = async (req: Request, res: Response) => {
       }
     }
 
-    if (!user) {
+    const dbUser = user
+    if (!dbUser) {
       return res.status(404).json({ message: 'User not found' })
     }
 
-    res.status(200).json(user)
+    res.status(200).json(dbUser)
   } catch (error) {
     console.error('Get profile error:', error)
     res.status(500).json({ message: 'Internal server error' })

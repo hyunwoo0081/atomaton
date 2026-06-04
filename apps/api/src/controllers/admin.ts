@@ -3,74 +3,88 @@ import prisma from '@atomaton/db'
 import bcrypt from 'bcryptjs'
 
 export const getSystemStats = async (req: Request, res: Response) => {
-  if (!req.isDeveloper) {
-    return res
-      .status(403)
-      .json({ message: 'Access denied. Developer privileges required.' })
-  }
+  const maxRetries = 5
+  const retryDelays = [1000, 5000, 30000, 120000, 600000]
 
   try {
-    const totalUsers = await prisma.user.count()
-    const totalWorkflows = await prisma.workflow.count()
-    const activeWorkflows = await prisma.workflow.count({
-      where: { is_active: true },
-    })
-
-    const recentLogs = await prisma.log.findMany({
-      take: 1000,
-      orderBy: { created_at: 'desc' },
-      select: { status: true },
-    })
-
-    const successCount = recentLogs.filter(
-      (log) => log.status === 'SUCCESS'
-    ).length
-    const failureCount = recentLogs.filter(
-      (log) => log.status === 'FAILURE'
-    ).length
-    const totalExecutions = successCount + failureCount
-    const successRate =
-      totalExecutions > 0
-        ? ((successCount / totalExecutions) * 100).toFixed(1) + '%'
-        : '0%'
-
-    const failureStats = await prisma.log.groupBy({
-      by: ['workflowId'],
-      where: { status: 'FAILURE' },
-      _count: {
-        status: true,
-      },
-      orderBy: {
-        _count: {
-          status: 'desc',
-        },
-      },
-      take: 5,
-    })
-
-    const problematicWorkflows = await Promise.all(
-      failureStats.map(async (stat) => {
-        const workflow = await prisma.workflow.findUnique({
-          where: { id: stat.workflowId },
-          select: { name: true },
-        })
-        return {
-          id: stat.workflowId,
-          name: workflow?.name || 'Unknown',
-          failureCount: stat._count.status,
+    let stats = null
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelays[attempt - 1])
+          )
         }
-      })
-    )
 
-    res.status(200).json({
-      overview: {
-        totalUsers,
-        totalWorkflows,
-        activeWorkflows,
-        successRate,
-      },
-      problematicWorkflows,
-    })
+        const totalUsers = await prisma.user.count()
+        const totalWorkflows = await prisma.workflow.count()
+        const activeWorkflows = await prisma.workflow.count({
+          where: { is_active: true },
+        })
+
+        const recentLogs = await prisma.log.findMany({
+          take: 1000,
+          orderBy: { created_at: 'desc' },
+          select: { status: true },
+        })
+
+        const successCount = recentLogs.filter(
+          (log) => log.status === 'SUCCESS'
+        ).length
+        const failureCount = recentLogs.filter(
+          (log) => log.status === 'FAILURE'
+        ).length
+        const totalExecutions = successCount + failureCount
+        const successRate =
+          totalExecutions > 0
+            ? ((successCount / totalExecutions) * 100).toFixed(1) + '%'
+            : '0%'
+
+        const failureStats = await prisma.log.groupBy({
+          by: ['workflowId'],
+          where: { status: 'FAILURE' },
+          _count: {
+            status: true,
+          },
+          orderBy: {
+            _count: {
+              status: 'desc',
+            },
+          },
+          take: 5,
+        })
+
+        const problematicWorkflows = await Promise.all(
+          failureStats.map(async (stat) => {
+            const workflow = await prisma.workflow.findUnique({
+              where: { id: stat.workflowId },
+              select: { name: true },
+            })
+            return {
+              id: stat.workflowId,
+              name: workflow?.name || 'Unknown',
+              failureCount: stat._count.status,
+            }
+          })
+        )
+
+        stats = {
+          overview: {
+            totalUsers,
+            totalWorkflows,
+            activeWorkflows,
+            successRate,
+          },
+          problematicWorkflows,
+        }
+        break
+      } catch (error) {
+        if (attempt < maxRetries - 1) continue
+        throw error
+      }
+    }
+
+    res.status(200).json(stats)
   } catch (error: unknown) {
     console.error('Error fetching system stats:', error)
     res.status(500).json({ message: 'Internal server error' })
@@ -78,12 +92,6 @@ export const getSystemStats = async (req: Request, res: Response) => {
 }
 
 export const getUsers = async (req: Request, res: Response) => {
-  if (!req.isDeveloper) {
-    return res
-      .status(403)
-      .json({ message: 'Access denied. Developer privileges required.' })
-  }
-
   const maxRetries = 5
   const retryDelays = [1000, 5000, 30000, 120000, 600000]
 
@@ -121,12 +129,6 @@ export const getUsers = async (req: Request, res: Response) => {
 }
 
 export const createUser = async (req: Request, res: Response) => {
-  if (!req.isDeveloper) {
-    return res
-      .status(403)
-      .json({ message: 'Access denied. Developer privileges required.' })
-  }
-
   const { email, password, is_developer } = req.body
 
   if (!email || !password) {
@@ -201,12 +203,6 @@ export const createUser = async (req: Request, res: Response) => {
 }
 
 export const deleteUser = async (req: Request, res: Response) => {
-  if (!req.isDeveloper) {
-    return res
-      .status(403)
-      .json({ message: 'Access denied. Developer privileges required.' })
-  }
-
   const { id } = req.params
 
   if (req.userId === id) {
