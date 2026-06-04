@@ -95,7 +95,11 @@ export const updateWorkflow = async (req: Request, res: Response) => {
     const accountIds = new Set<string>()
     for (const node of nodes) {
       const config = node.data?.config as Record<string, unknown> | undefined
-      if (config && typeof config.accountId === 'string') {
+      if (
+        config &&
+        typeof config.accountId === 'string' &&
+        config.accountId.trim() !== ''
+      ) {
         accountIds.add(config.accountId)
       }
     }
@@ -143,11 +147,9 @@ export const updateWorkflow = async (req: Request, res: Response) => {
       }
       for (const acc of dbAccounts) {
         if (acc.userId !== userId) {
-          return res
-            .status(403)
-            .json({
-              message: 'Forbidden: You do not own this integration account',
-            })
+          return res.status(403).json({
+            message: 'Forbidden: You do not own this integration account',
+          })
         }
       }
     }
@@ -175,10 +177,12 @@ export const updateWorkflow = async (req: Request, res: Response) => {
 
         const triggerNode = nodes.find((n) => n.type.startsWith('trigger'))
         if (triggerNode) {
-          const config = triggerNode.data.config as unknown as {
-            accountId?: string
-          }
-          if (triggerNode.type === 'trigger-webhook' || config.accountId) {
+          const config = triggerNode.data?.config as unknown as
+            | {
+                accountId?: string
+              }
+            | undefined
+          if (triggerNode.type === 'trigger-webhook' || config?.accountId) {
             const triggerData = {
               type:
                 triggerNode.type === 'trigger-webhook'
@@ -225,6 +229,9 @@ export const updateWorkflow = async (req: Request, res: Response) => {
           if (node.type === 'action-notion') type = 'NOTION_PAGE'
           if (node.type === 'condition') type = 'CONDITION'
           if (node.type === 'action-http') type = 'HTTP_REQUEST'
+          if (node.type === 'action-regex-replace') type = 'REGEX_REPLACE'
+          if (node.type === 'action-google-bridge') type = 'GOOGLE_BRIDGE'
+          if (node.type === 'action-url-decode') type = 'URL_DECODE'
 
           await tx.action.create({
             data: {
