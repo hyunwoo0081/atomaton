@@ -168,42 +168,50 @@ export const updateWorkflow = async (req: Request, res: Response) => {
       updateData.settings = globalSettings as unknown as Prisma.InputJsonValue
 
     if (nodes && edges) {
-      await prisma.$transaction(async (tx) => {
-        await tx.action.deleteMany({ where: { workflowId: id } })
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.action.deleteMany({ where: { workflowId: id } })
 
-        const existingTrigger = await tx.trigger.findUnique({
-          where: { workflowId: id },
-        })
+          const existingTrigger = await tx.trigger.findUnique({
+            where: { workflowId: id },
+          })
 
-        const triggerNode = nodes.find((n) => n.type.startsWith('trigger'))
-        if (triggerNode) {
-          const config = triggerNode.data?.config as unknown as
-            | {
-                accountId?: string
+          const triggerNode = nodes.find((n) => n.type.startsWith('trigger'))
+          if (triggerNode) {
+            const config = triggerNode.data?.config as unknown as
+              | {
+                  accountId?: string
+                }
+              | undefined
+            if (triggerNode.type === 'trigger-webhook' || config?.accountId) {
+              const triggerData = {
+                type:
+                  triggerNode.type === 'trigger-webhook'
+                    ? 'WEBHOOK'
+                    : 'IMAP_POLLING',
+                config: triggerNode.data
+                  .config as unknown as Prisma.InputJsonValue,
               }
-            | undefined
-          if (triggerNode.type === 'trigger-webhook' || config?.accountId) {
-            const triggerData = {
-              type:
-                triggerNode.type === 'trigger-webhook'
-                  ? 'WEBHOOK'
-                  : 'IMAP_POLLING',
-              config: triggerNode.data
-                .config as unknown as Prisma.InputJsonValue,
-            }
 
-            if (existingTrigger) {
-              await tx.trigger.update({
-                where: { id: existingTrigger.id },
-                data: triggerData,
-              })
+              if (existingTrigger) {
+                await tx.trigger.update({
+                  where: { id: existingTrigger.id },
+                  data: triggerData,
+                })
+              } else {
+                await tx.trigger.create({
+                  data: {
+                    ...triggerData,
+                    workflowId: id,
+                  },
+                })
+              }
             } else {
-              await tx.trigger.create({
-                data: {
-                  ...triggerData,
-                  workflowId: id,
-                },
-              })
+              if (existingTrigger) {
+                await tx.trigger.delete({
+                  where: { id: existingTrigger.id },
+                })
+              }
             }
           } else {
             if (existingTrigger) {
@@ -212,42 +220,42 @@ export const updateWorkflow = async (req: Request, res: Response) => {
               })
             }
           }
-        } else {
-          if (existingTrigger) {
-            await tx.trigger.delete({
-              where: { id: existingTrigger.id },
+
+          const actionNodes = nodes.filter(
+            (n) => n.type.startsWith('action') || n.type === 'condition'
+          )
+          if (actionNodes.length > 0) {
+            const actionsData = actionNodes.map((node, i) => {
+              let type = 'DISCORD_WEBHOOK'
+              if (node.type === 'action-notion') type = 'NOTION_PAGE'
+              if (node.type === 'condition') type = 'CONDITION'
+              if (node.type === 'action-http') type = 'HTTP_REQUEST'
+              if (node.type === 'action-regex-replace') type = 'REGEX_REPLACE'
+              if (node.type === 'action-google-bridge') type = 'GOOGLE_BRIDGE'
+              if (node.type === 'action-url-decode') type = 'URL_DECODE'
+
+              return {
+                workflowId: id,
+                type,
+                config: {
+                  ...node.data.config,
+                  nodeId: node.id,
+                } as unknown as Prisma.InputJsonValue,
+                order: i,
+              }
+            })
+
+            await tx.action.createMany({
+              data: actionsData,
             })
           }
+
+          await tx.workflow.update({ where: { id, userId }, data: updateData })
+        },
+        {
+          timeout: 15000,
         }
-
-        const actionNodes = nodes.filter(
-          (n) => n.type.startsWith('action') || n.type === 'condition'
-        )
-        for (let i = 0; i < actionNodes.length; i++) {
-          const node = actionNodes[i]
-          let type = 'DISCORD_WEBHOOK'
-          if (node.type === 'action-notion') type = 'NOTION_PAGE'
-          if (node.type === 'condition') type = 'CONDITION'
-          if (node.type === 'action-http') type = 'HTTP_REQUEST'
-          if (node.type === 'action-regex-replace') type = 'REGEX_REPLACE'
-          if (node.type === 'action-google-bridge') type = 'GOOGLE_BRIDGE'
-          if (node.type === 'action-url-decode') type = 'URL_DECODE'
-
-          await tx.action.create({
-            data: {
-              workflowId: id,
-              type,
-              config: {
-                ...node.data.config,
-                nodeId: node.id,
-              } as unknown as Prisma.InputJsonValue,
-              order: i,
-            },
-          })
-        }
-
-        await tx.workflow.update({ where: { id, userId }, data: updateData })
-      })
+      )
     } else {
       await prisma.workflow.update({ where: { id, userId }, data: updateData })
     }
