@@ -11,6 +11,7 @@ import { setProcessor } from './executors/queue'
 import { executeWorkflow } from './executors/executor'
 import { cleanupOldLogs } from './services/logCleanup'
 import { WorkflowContext } from './executors/types'
+import { getHealth } from './controllers/health'
 
 const app = express()
 const port = process.env.PORT || 3010
@@ -20,6 +21,8 @@ app.use(express.json())
 app.get('/', (req: Request, res: Response) => {
   res.send('Atomaton API is running!')
 })
+
+app.get('/health', getHealth)
 
 app.use('/auth', authRouter)
 app.use('/workflows', workflowRouter)
