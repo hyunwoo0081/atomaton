@@ -16,6 +16,9 @@ vi.mock('@atomaton/db', () => {
       action: {
         deleteMany: vi.fn(),
         create: vi.fn(),
+        findMany: vi.fn(),
+        createMany: vi.fn(),
+        update: vi.fn(),
       },
       trigger: {
         findUnique: vi.fn(),
@@ -33,6 +36,9 @@ const txMock = {
   action: {
     deleteMany: vi.fn(),
     create: vi.fn(),
+    findMany: vi.fn(),
+    createMany: vi.fn(),
+    update: vi.fn(),
   },
   trigger: {
     findUnique: vi.fn(),
@@ -181,7 +187,9 @@ describe('Workflow Controller - updateWorkflow (accountId validation)', () => {
     )
 
     // Transaction mocks setup
+    txMock.action.findMany.mockResolvedValueOnce([])
     txMock.action.deleteMany.mockResolvedValueOnce({ count: 0 })
+    txMock.action.createMany.mockResolvedValueOnce({ count: 1 })
     txMock.trigger.findUnique.mockResolvedValueOnce(null)
     txMock.trigger.create.mockResolvedValueOnce({})
     txMock.workflow.update.mockResolvedValueOnce({})

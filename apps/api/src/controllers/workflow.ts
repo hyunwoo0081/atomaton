@@ -170,8 +170,6 @@ export const updateWorkflow = async (req: Request, res: Response) => {
     if (nodes && edges) {
       await prisma.$transaction(
         async (tx) => {
-          await tx.action.deleteMany({ where: { workflowId: id } })
-
           const existingTrigger = await tx.trigger.findUnique({
             where: { workflowId: id },
           })
@@ -221,32 +219,97 @@ export const updateWorkflow = async (req: Request, res: Response) => {
             }
           }
 
+          // 1. Fetch existing actions in transaction
+          const existingActions = await tx.action.findMany({
+            where: { workflowId: id },
+          })
+
           const actionNodes = nodes.filter(
             (n) => n.type.startsWith('action') || n.type === 'condition'
           )
-          if (actionNodes.length > 0) {
-            const actionsData = actionNodes.map((node, i) => {
-              let type = 'DISCORD_WEBHOOK'
-              if (node.type === 'action-notion') type = 'NOTION_PAGE'
-              if (node.type === 'condition') type = 'CONDITION'
-              if (node.type === 'action-http') type = 'HTTP_REQUEST'
-              if (node.type === 'action-regex-replace') type = 'REGEX_REPLACE'
-              if (node.type === 'action-google-bridge') type = 'GOOGLE_BRIDGE'
-              if (node.type === 'action-url-decode') type = 'URL_DECODE'
 
-              return {
+          // Maps for comparison based on nodeId (stored inside config)
+          const existingActionMap = new Map<
+            string,
+            (typeof existingActions)[0]
+          >()
+          for (const action of existingActions) {
+            const actionConfig = action.config as Record<string, unknown> | null
+            if (actionConfig && typeof actionConfig.nodeId === 'string') {
+              existingActionMap.set(actionConfig.nodeId, action)
+            }
+          }
+
+          const incomingNodeIds = new Set(actionNodes.map((n) => n.id))
+
+          // Find actions to delete (exist in DB but not in incoming nodes)
+          const deletedActionIds: string[] = []
+          for (const action of existingActions) {
+            const actionConfig = action.config as Record<string, unknown> | null
+            const nodeId = actionConfig?.nodeId
+            if (typeof nodeId !== 'string' || !incomingNodeIds.has(nodeId)) {
+              deletedActionIds.push(action.id)
+            }
+          }
+
+          if (deletedActionIds.length > 0) {
+            await tx.action.deleteMany({
+              where: { id: { in: deletedActionIds } },
+            })
+          }
+
+          // Separate creation and updates
+          const actionsToCreate: Prisma.ActionCreateManyInput[] = []
+
+          for (let i = 0; i < actionNodes.length; i++) {
+            const node = actionNodes[i]
+            let type = 'DISCORD_WEBHOOK'
+            if (node.type === 'action-notion') type = 'NOTION_PAGE'
+            if (node.type === 'condition') type = 'CONDITION'
+            if (node.type === 'action-http') type = 'HTTP_REQUEST'
+            if (node.type === 'action-regex-replace') type = 'REGEX_REPLACE'
+            if (node.type === 'action-google-bridge') type = 'GOOGLE_BRIDGE'
+            if (node.type === 'action-url-decode') type = 'URL_DECODE'
+
+            const newConfig = {
+              ...node.data.config,
+              nodeId: node.id,
+            }
+
+            const existingAction = existingActionMap.get(node.id)
+
+            if (!existingAction) {
+              // If action doesn't exist, collect for createMany
+              actionsToCreate.push({
                 workflowId: id,
                 type,
-                config: {
-                  ...node.data.config,
-                  nodeId: node.id,
-                } as unknown as Prisma.InputJsonValue,
+                config: newConfig as unknown as Prisma.InputJsonValue,
                 order: i,
-              }
-            })
+              })
+            } else {
+              // Update only if type, order, or config has changed
+              const isTypeChanged = existingAction.type !== type
+              const isOrderChanged = existingAction.order !== i
+              const isConfigChanged =
+                JSON.stringify(existingAction.config) !==
+                JSON.stringify(newConfig)
 
+              if (isTypeChanged || isOrderChanged || isConfigChanged) {
+                await tx.action.update({
+                  where: { id: existingAction.id },
+                  data: {
+                    type,
+                    config: newConfig as unknown as Prisma.InputJsonValue,
+                    order: i,
+                  },
+                })
+              }
+            }
+          }
+
+          if (actionsToCreate.length > 0) {
             await tx.action.createMany({
-              data: actionsData,
+              data: actionsToCreate,
             })
           }
 
