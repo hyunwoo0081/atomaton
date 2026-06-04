@@ -7,6 +7,7 @@ interface BaseNodeProps {
   icon?: React.ReactNode
   isValid?: boolean
   selected?: boolean
+  description?: string
   children?: React.ReactNode
 }
 
@@ -16,6 +17,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
   icon,
   isValid,
   selected,
+  description,
   children,
 }) => {
   const deleteNode = useWorkflowStore((state) => state.deleteNode)
@@ -61,6 +63,12 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
           )}
         </div>
       </div>
+
+      {description && (
+        <div className="text-[10px] text-white/50 italic mb-2 break-words max-w-[160px] border-l-2 border-white/10 pl-1.5 leading-relaxed">
+          {description}
+        </div>
+      )}
 
       <div className="text-white/60 text-xs">{children}</div>
     </div>

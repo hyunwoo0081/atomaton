@@ -259,6 +259,19 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
       </div>
 
       <div className="flex-1 space-y-8">
+        {/* Node Description/Memo */}
+        <div className="flex flex-col gap-2 p-3 bg-white/5 border border-white/10 rounded-xl mb-2">
+          <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider">
+            Description / Memo
+          </label>
+          <textarea
+            className="px-3 py-2 bg-[#0D0E12]/50 border border-white/10 rounded-lg text-white placeholder-white/30 text-xs focus:outline-none focus:ring-1 focus:ring-[#8A3FFC] h-16 resize-none transition-all leading-normal"
+            value={config.description || ''}
+            onChange={(e) => handleChange('description', e.target.value)}
+            placeholder="What does this node do? (e.g. Filter spam emails)"
+          />
+        </div>
+
         {(nodeType === 'trigger' || nodeType === 'trigger-webhook') && (
           <>
             <h3 className="font-bold text-lg text-[#8A3FFC] border-b border-white/10 pb-2">
