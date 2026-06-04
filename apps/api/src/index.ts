@@ -12,6 +12,8 @@ import { executeWorkflow } from './executors/executor'
 import { cleanupOldLogs } from './services/logCleanup'
 import { WorkflowContext } from './executors/types'
 import { getHealth } from './controllers/health'
+import swaggerUi from 'swagger-ui-express'
+import swaggerDocument from './swagger.json'
 
 const app = express()
 const port = process.env.PORT || 3010
@@ -23,6 +25,8 @@ app.get('/', (req: Request, res: Response) => {
 })
 
 app.get('/health', getHealth)
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
 
 app.use('/auth', authRouter)
 app.use('/workflows', workflowRouter)
