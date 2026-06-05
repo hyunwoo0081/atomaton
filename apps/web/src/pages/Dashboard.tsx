@@ -19,6 +19,7 @@ export const Dashboard: React.FC = () => {
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null)
+  const [updatingWorkflowIds, setUpdatingWorkflowIds] = useState<string[]>([])
   const createDialogRef = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
@@ -164,15 +165,21 @@ export const Dashboard: React.FC = () => {
     e.preventDefault()
     e.stopPropagation()
 
+    if (updatingWorkflowIds.includes(id)) return
+
+    setUpdatingWorkflowIds((prev) => [...prev, id])
+
     try {
       await api.put(`/workflows/${id}`, { is_active: !currentStatus })
-      refetchWorkflows()
+      await refetchWorkflows()
     } catch (error: unknown) {
       const message =
         error instanceof Error
           ? error.message
           : 'Failed to update workflow status'
       alert(message)
+    } finally {
+      setUpdatingWorkflowIds((prev) => prev.filter((item) => item !== id))
     }
   }
 
@@ -194,115 +201,129 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {workflows.map((workflow) => (
-            <div key={workflow.id} className="relative group">
-              <Link to={`/workflow/${workflow.id}`} className="block">
-                <Card className="h-full flex flex-col justify-between transition-all duration-300 group-hover:scale-[1.02] group-hover:shadow-[0_0_30px_rgba(138,63,252,0.15)] min-h-[160px]">
-                  <div>
-                    <h3 className="text-xl font-bold text-white mb-2 pr-10 truncate">
-                      {workflow.name}
-                    </h3>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                        workflow.is_active
-                          ? 'bg-[#00F5A0]/20 text-[#00F5A0] border-[#00F5A0]/30'
-                          : 'bg-white/10 text-white/50 border-white/20'
-                      }`}
-                    >
-                      {workflow.is_active ? 'Active' : 'Paused'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center mt-6 pt-4 border-t border-white/5">
-                    <span className="text-xs text-white/30 font-mono">
-                      {new Date(workflow.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </Card>
-              </Link>
+          {workflows.map((workflow) => {
+            const isUpdating = updatingWorkflowIds.includes(workflow.id)
+            return (
+              <div
+                key={workflow.id}
+                className={`relative group transition-all duration-300 ${
+                  isUpdating ? 'pointer-events-none opacity-60' : ''
+                }`}
+              >
+                <Link to={`/workflow/${workflow.id}`} className="block">
+                  <Card className="h-full flex flex-col justify-between transition-all duration-300 group-hover:scale-[1.02] group-hover:shadow-[0_0_30px_rgba(138,63,252,0.15)] min-h-[160px]">
+                    <div>
+                      <h3 className="text-xl font-bold text-white mb-2 pr-10 truncate">
+                        {workflow.name}
+                      </h3>
+                      {isUpdating ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border bg-yellow-500/20 text-yellow-400 border-yellow-500/30 animate-pulse">
+                          Updating...
+                        </span>
+                      ) : (
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                            workflow.is_active
+                              ? 'bg-[#00F5A0]/20 text-[#00F5A0] border-[#00F5A0]/30'
+                              : 'bg-white/10 text-white/50 border-white/20'
+                          }`}
+                        >
+                          {workflow.is_active ? 'Active' : 'Paused'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center mt-6 pt-4 border-t border-white/5">
+                      <span className="text-xs text-white/30 font-mono">
+                        {new Date(workflow.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </Card>
+                </Link>
 
-              {/* Ellipsis Actions Button */}
-              <div className="absolute top-6 right-6 z-20">
-                <button
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    setActiveDropdownId(
-                      activeDropdownId === workflow.id ? null : workflow.id
-                    )
-                  }}
-                  className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-colors focus:outline-none"
-                  title="Actions"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                    />
-                  </svg>
-                </button>
-
-                {/* Dropdown Menu */}
-                {activeDropdownId === workflow.id && (
-                  <div
-                    className="absolute right-0 mt-2 w-40 bg-[#17181F] border border-white/10 rounded-2xl shadow-2xl py-2 z-30 backdrop-blur-xl animate-in fade-in slide-in-from-top-1 duration-200"
+                {/* Ellipsis Actions Button */}
+                <div className="absolute top-6 right-6 z-20">
+                  <button
                     onClick={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
+                      setActiveDropdownId(
+                        activeDropdownId === workflow.id ? null : workflow.id
+                      )
                     }}
+                    className="p-1.5 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-colors focus:outline-none"
+                    title="Actions"
                   >
-                    <button
-                      onClick={(e) => {
-                        handleToggleActiveClick(
-                          e,
-                          workflow.id,
-                          workflow.is_active
-                        )
-                        setActiveDropdownId(null)
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/5 hover:text-white transition-colors"
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
                     >
-                      {workflow.is_active ? 'Pause' : 'Activate'}
-                    </button>
-                    <button
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                      />
+                    </svg>
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {activeDropdownId === workflow.id && (
+                    <div
+                      className="absolute right-0 mt-2 w-40 bg-[#17181F] border border-white/10 rounded-2xl shadow-2xl py-2 z-30 backdrop-blur-xl animate-in fade-in slide-in-from-top-1 duration-200"
                       onClick={(e) => {
-                        handleRenameClick(e, workflow.id, workflow.name)
-                        setActiveDropdownId(null)
+                        e.preventDefault()
+                        e.stopPropagation()
                       }}
-                      className="w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/5 hover:text-white transition-colors"
                     >
-                      Rename
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        handleDuplicateClick(e, workflow.id)
-                        setActiveDropdownId(null)
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/5 hover:text-white transition-colors"
-                    >
-                      Duplicate
-                    </button>
-                    <div className="h-px bg-white/5 my-1" />
-                    <button
-                      onClick={(e) => {
-                        handleDeleteClick(e, workflow.id, workflow.name)
-                        setActiveDropdownId(null)
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-[#FF2E63]/10 hover:text-red-300 transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
+                      <button
+                        onClick={(e) => {
+                          handleToggleActiveClick(
+                            e,
+                            workflow.id,
+                            workflow.is_active
+                          )
+                          setActiveDropdownId(null)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/5 hover:text-white transition-colors"
+                      >
+                        {workflow.is_active ? 'Pause' : 'Activate'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          handleRenameClick(e, workflow.id, workflow.name)
+                          setActiveDropdownId(null)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/5 hover:text-white transition-colors"
+                      >
+                        Rename
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          handleDuplicateClick(e, workflow.id)
+                          setActiveDropdownId(null)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/5 hover:text-white transition-colors"
+                      >
+                        Duplicate
+                      </button>
+                      <div className="h-px bg-white/5 my-1" />
+                      <button
+                        onClick={(e) => {
+                          handleDeleteClick(e, workflow.id, workflow.name)
+                          setActiveDropdownId(null)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-[#FF2E63]/10 hover:text-red-300 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           {workflows.length === 0 && (
             <div className="col-span-full text-center py-12 text-white/50 border border-dashed border-white/10 rounded-3xl">
