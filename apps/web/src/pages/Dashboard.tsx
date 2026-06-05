@@ -184,7 +184,56 @@ export const Dashboard: React.FC = () => {
   }
 
   if (isLoading) {
-    return <div className="p-8 text-white">Loading...</div>
+    return (
+      <div className="space-y-12 relative z-10">
+        {/* Workflows Header Skeleton */}
+        <section>
+          <div className="flex justify-between items-center mb-8">
+            <div className="h-9 w-48 bg-white/10 rounded-lg animate-pulse" />
+            <div className="h-10 w-36 bg-white/10 rounded-3xl animate-pulse" />
+          </div>
+
+          {/* Cards Grid Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="border border-white/10 rounded-[32px] p-6 bg-[rgba(255,255,255,0.05)] backdrop-blur-xl h-[160px] flex flex-col justify-between animate-pulse"
+              >
+                <div>
+                  <div className="h-6 w-3/4 bg-white/10 rounded-md mb-3" />
+                  <div className="h-5 w-16 bg-white/10 rounded-full" />
+                </div>
+                <div className="flex justify-between items-center mt-6 pt-4 border-t border-white/5">
+                  <div className="h-4 w-24 bg-white/10 rounded-md" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Recent Activity Skeleton */}
+        <section>
+          <div className="h-8 w-48 bg-white/10 rounded-lg mb-6 animate-pulse" />
+          <div className="shadow-2xl overflow-hidden border border-white/10 rounded-[24px] bg-white/5 animate-pulse">
+            <div className="bg-white/5 h-12 border-b border-white/10 flex items-center px-6">
+              <div className="h-4 w-12 bg-white/10 rounded mr-20" />
+              <div className="h-4 w-24 bg-white/10 rounded mr-auto" />
+              <div className="h-4 w-16 bg-white/10 rounded" />
+            </div>
+            <div className="divide-y divide-white/10">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-14 flex items-center px-6">
+                  <div className="h-6 w-16 bg-white/10 rounded-full mr-16" />
+                  <div className="h-4 w-72 bg-white/10 rounded mr-auto" />
+                  <div className="h-4 w-36 bg-white/10 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+    )
   }
 
   return (
