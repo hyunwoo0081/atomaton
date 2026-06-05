@@ -175,7 +175,9 @@ export const Layout: React.FC<LayoutProps> = ({
         )}
       </nav>
 
-      <main className={`flex-1 overflow-auto z-10 ${fullWidth ? '' : 'py-10'}`}>
+      <main
+        className={`flex-1 ${fullWidth ? 'overflow-hidden' : 'overflow-auto py-10'} z-10`}
+      >
         <div
           className={`${fullWidth ? 'h-full' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}`}
         >
