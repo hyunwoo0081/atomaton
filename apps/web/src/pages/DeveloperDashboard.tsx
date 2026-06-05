@@ -170,7 +170,38 @@ export const DeveloperDashboard: React.FC = () => {
       {activeTab === 'stats' && (
         <div className="space-y-8">
           {statsLoading ? (
-            <div className="text-white/50 py-8">Loading stats...</div>
+            <>
+              {/* Stat Cards Skeleton */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[1, 2, 3, 4].map((i) => (
+                  <Card
+                    key={i}
+                    className="p-6 border border-white/5 bg-white/[0.02] backdrop-blur-md animate-pulse"
+                  >
+                    <div className="h-4 w-24 bg-white/10 rounded" />
+                    <div className="mt-3 h-8 w-12 bg-white/10 rounded" />
+                  </Card>
+                ))}
+              </div>
+
+              {/* Problematic Workflows Skeleton */}
+              <section>
+                <div className="h-7 w-48 bg-white/10 rounded-lg mb-4 animate-pulse" />
+                <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden shadow-2xl animate-pulse">
+                  <div className="divide-y divide-white/5">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="px-6 py-5 flex flex-col gap-2">
+                        <div className="flex justify-between items-center">
+                          <div className="h-5 w-48 bg-white/10 rounded" />
+                          <div className="h-5 w-20 bg-white/10 rounded-full" />
+                        </div>
+                        <div className="h-4 w-64 bg-white/10 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            </>
           ) : statsError || !stats ? (
             <div className="text-red-500 py-8">
               Failed to load system statistics.
@@ -271,7 +302,46 @@ export const DeveloperDashboard: React.FC = () => {
           </div>
 
           {usersLoading ? (
-            <div className="text-white/50 py-8">Loading users...</div>
+            <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden shadow-2xl animate-pulse">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-white/5">
+                  <thead className="bg-white/[0.02]">
+                    <tr>
+                      <th className="px-6 py-4 text-left">
+                        <div className="h-4 w-12 bg-white/10 rounded" />
+                      </th>
+                      <th className="px-6 py-4 text-left">
+                        <div className="h-4 w-10 bg-white/10 rounded" />
+                      </th>
+                      <th className="px-6 py-4 text-left">
+                        <div className="h-4 w-20 bg-white/10 rounded" />
+                      </th>
+                      <th className="px-6 py-4 text-right">
+                        <div className="h-4 w-16 bg-white/10 rounded ml-auto" />
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {[1, 2, 3, 4].map((i) => (
+                      <tr key={i}>
+                        <td className="px-6 py-5">
+                          <div className="h-4 w-48 bg-white/10 rounded" />
+                        </td>
+                        <td className="px-6 py-5">
+                          <div className="h-5 w-14 bg-white/10 rounded-full" />
+                        </td>
+                        <td className="px-6 py-5">
+                          <div className="h-4 w-24 bg-white/10 rounded" />
+                        </td>
+                        <td className="px-6 py-5 text-right">
+                          <div className="h-7 w-16 bg-white/10 rounded ml-auto" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           ) : (
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
               <div className="overflow-x-auto">
