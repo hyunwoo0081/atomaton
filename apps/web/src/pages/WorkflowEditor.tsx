@@ -41,6 +41,7 @@ import type {
 const WorkflowEditorContent: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const [isTestModalOpen, setIsTestModalOpen] = useState(false)
+  const [workflowName, setWorkflowName] = useState('')
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const reactFlowInstance = useReactFlow()
   const queryClient = useQueryClient()
@@ -128,6 +129,9 @@ const WorkflowEditorContent: React.FC = () => {
       if (workflow.settings) {
         updateGlobalSettings(workflow.settings)
       }
+      if (workflow.name) {
+        setWorkflowName(workflow.name)
+      }
       setIsDirty(false)
     }
   }, [workflow, setNodes, setEdges, updateGlobalSettings, setIsDirty])
@@ -162,6 +166,7 @@ const WorkflowEditorContent: React.FC = () => {
 
   const saveWorkflowMutation = useMutation({
     mutationFn: (data: {
+      name: string
       nodes: Node<CustomNodeData>[]
       edges: Edge[]
       globalSettings: GlobalSettings
@@ -281,7 +286,12 @@ const WorkflowEditorContent: React.FC = () => {
       return
     }
 
-    saveWorkflowMutation.mutate({ nodes, edges, globalSettings })
+    saveWorkflowMutation.mutate({
+      name: workflowName,
+      nodes,
+      edges,
+      globalSettings,
+    })
   }
 
   const handleRunTest = async (
@@ -316,6 +326,11 @@ const WorkflowEditorContent: React.FC = () => {
   return (
     <div className="h-full flex">
       <Sidebar
+        workflowName={workflowName}
+        onChangeName={(newName) => {
+          setWorkflowName(newName)
+          setIsDirty(true)
+        }}
         onSave={handleSaveWorkflow}
         onTest={() => setIsTestModalOpen(true)}
         isSaving={saveWorkflowMutation.isPending}

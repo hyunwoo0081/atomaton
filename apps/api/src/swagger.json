@@ -501,6 +501,43 @@
         }
       }
     },
+    "/workflows/{id}/duplicate": {
+      "post": {
+        "summary": "Duplicate a workflow",
+        "description": "Clones a workflow along with its trigger, rules, actions, UI configuration, and global settings. The duplicated workflow name will have a ' (Copy)' suffix.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Workflow duplicated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workflow"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workflow not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/accounts": {
       "get": {
         "summary": "List integration accounts",

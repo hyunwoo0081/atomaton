@@ -3,11 +3,20 @@ import { Button } from '@atomaton/ui'
 import { GlobalSettingsModal } from './GlobalSettingsModal'
 
 export const Sidebar: React.FC<{
+  workflowName: string
+  onChangeName: (name: string) => void
   onSave: () => void
   onTest: () => void
   isSaving?: boolean
   isDirty?: boolean
-}> = ({ onSave, onTest, isSaving = false, isDirty = false }) => {
+}> = ({
+  workflowName,
+  onChangeName,
+  onSave,
+  onTest,
+  isSaving = false,
+  isDirty = false,
+}) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   const onDragStart = (event: React.DragEvent, nodeType: string) => {
@@ -17,7 +26,18 @@ export const Sidebar: React.FC<{
 
   return (
     <aside className="w-64 bg-white/5 backdrop-blur-xl border-r border-white/10 p-4 flex flex-col gap-4 z-20">
-      <div className="text-lg font-bold text-white mb-2">Workflow</div>
+      <div className="flex flex-col gap-1 mb-2">
+        <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">
+          Workflow Name
+        </label>
+        <input
+          type="text"
+          value={workflowName}
+          onChange={(e) => onChangeName(e.target.value)}
+          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#8A3FFC] focus:bg-white/10 transition-all duration-300"
+          placeholder="Workflow Name"
+        />
+      </div>
       <div className="space-y-2">
         <Button
           variant="secondary"

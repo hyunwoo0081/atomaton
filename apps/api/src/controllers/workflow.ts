@@ -339,11 +339,135 @@ export const deleteWorkflow = async (req: Request, res: Response) => {
   const userId = req.userId
   if (!userId) return res.status(401).json({ message: 'Unauthorized' })
 
+  const maxRetries = 5
+  const retryDelays = [1000, 5000, 30000, 120000, 600000]
+
   try {
-    await prisma.workflow.delete({ where: { id, userId } })
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelays[attempt - 1])
+          )
+        }
+        await prisma.workflow.delete({ where: { id, userId } })
+        break
+      } catch (error) {
+        if (attempt < maxRetries - 1) continue
+        throw error
+      }
+    }
     res.status(204).send()
   } catch (error: unknown) {
     console.error('Error deleting workflow:', error)
+    res.status(500).json({ message: 'Internal server error' })
+  }
+}
+
+export const duplicateWorkflow = async (req: Request, res: Response) => {
+  const { id } = req.params
+  const userId = req.userId
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' })
+
+  const maxRetries = 5
+  const retryDelays = [1000, 5000, 30000, 120000, 600000]
+
+  try {
+    let sourceWorkflow = null
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelays[attempt - 1])
+          )
+        }
+        sourceWorkflow = await prisma.workflow.findUnique({
+          where: { id, userId },
+          include: {
+            trigger: { include: { rules: true } },
+            actions: true,
+          },
+        })
+        break
+      } catch (error) {
+        if (attempt < maxRetries - 1) continue
+        throw error
+      }
+    }
+
+    if (!sourceWorkflow) {
+      return res.status(404).json({ message: 'Workflow not found' })
+    }
+
+    let newWorkflow = null
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelays[attempt - 1])
+          )
+        }
+
+        newWorkflow = await prisma.$transaction(async (tx) => {
+          const workflowCopy = await tx.workflow.create({
+            data: {
+              name: `${sourceWorkflow.name} (Copy)`,
+              userId,
+              is_active: false,
+              ui_config: sourceWorkflow.ui_config || Prisma.JsonNull,
+              settings: sourceWorkflow.settings || Prisma.JsonNull,
+            },
+          })
+
+          if (sourceWorkflow.trigger) {
+            const triggerCopy = await tx.trigger.create({
+              data: {
+                workflowId: workflowCopy.id,
+                type: sourceWorkflow.trigger.type,
+                config: sourceWorkflow.trigger.config || Prisma.JsonNull,
+              },
+            })
+
+            if (
+              sourceWorkflow.trigger.rules &&
+              sourceWorkflow.trigger.rules.length > 0
+            ) {
+              const rulesData = sourceWorkflow.trigger.rules.map((rule) => ({
+                triggerId: triggerCopy.id,
+                field: rule.field,
+                operator: rule.operator,
+                value: rule.value,
+              }))
+              await tx.rule.createMany({
+                data: rulesData,
+              })
+            }
+          }
+
+          if (sourceWorkflow.actions && sourceWorkflow.actions.length > 0) {
+            const actionsData = sourceWorkflow.actions.map((action) => ({
+              workflowId: workflowCopy.id,
+              type: action.type,
+              config: action.config || Prisma.JsonNull,
+              order: action.order,
+            }))
+            await tx.action.createMany({
+              data: actionsData,
+            })
+          }
+
+          return workflowCopy
+        })
+        break
+      } catch (error) {
+        if (attempt < maxRetries - 1) continue
+        throw error
+      }
+    }
+
+    res.status(201).json(newWorkflow)
+  } catch (error: unknown) {
+    console.error('Error duplicating workflow:', error)
     res.status(500).json({ message: 'Internal server error' })
   }
 }

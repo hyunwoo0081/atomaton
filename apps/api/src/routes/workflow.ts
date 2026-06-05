@@ -6,6 +6,7 @@ import {
   updateWorkflow,
   deleteWorkflow,
   testWorkflow,
+  duplicateWorkflow,
 } from '../controllers/workflow'
 import { authenticateToken, validateWorkflowOwner } from '../middleware/auth'
 
@@ -19,5 +20,6 @@ router.get('/:id', validateWorkflowOwner, getWorkflowById)
 router.put('/:id', validateWorkflowOwner, updateWorkflow)
 router.delete('/:id', validateWorkflowOwner, deleteWorkflow)
 router.post('/:id/test', validateWorkflowOwner, testWorkflow) // Add test route
+router.post('/:id/duplicate', validateWorkflowOwner, duplicateWorkflow)
 
 export default router

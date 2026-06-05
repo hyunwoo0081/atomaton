@@ -86,6 +86,69 @@ export const Dashboard: React.FC = () => {
     setIsCreateModalOpen(true)
   }
 
+  const handleRenameClick = async (
+    e: React.MouseEvent,
+    id: string,
+    currentName: string
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const newName = prompt('Enter a new name for this workflow:', currentName)
+    if (newName === null) return
+
+    const trimmed = newName.trim()
+    if (!trimmed) {
+      alert('Workflow name cannot be empty.')
+      return
+    }
+
+    try {
+      await api.put(`/workflows/${id}`, { name: trimmed })
+      refetchWorkflows()
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to rename workflow'
+      alert(message)
+    }
+  }
+
+  const handleDuplicateClick = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    try {
+      await api.post(`/workflows/${id}/duplicate`)
+      refetchWorkflows()
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to duplicate workflow'
+      alert(message)
+    }
+  }
+
+  const handleDeleteClick = async (
+    e: React.MouseEvent,
+    id: string,
+    name: string
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (!confirm(`Are you sure you want to delete the workflow "${name}"?`)) {
+      return
+    }
+
+    try {
+      await api.delete(`/workflows/${id}`)
+      refetchWorkflows()
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to delete workflow'
+      alert(message)
+    }
+  }
+
   if (isLoading) {
     return <div className="p-8 text-white">Loading...</div>
   }
@@ -110,25 +173,52 @@ export const Dashboard: React.FC = () => {
               to={`/workflow/${workflow.id}`}
               className="block group"
             >
-              <Card className="h-full transition-all duration-300 group-hover:scale-[1.02] group-hover:shadow-[0_0_30px_rgba(138,63,252,0.2)]">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-xl font-bold text-white mb-2">
-                      {workflow.name}
-                    </h3>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                        workflow.is_active
-                          ? 'bg-[#00F5A0]/20 text-[#00F5A0] border-[#00F5A0]/30'
-                          : 'bg-white/10 text-white/50 border-white/20'
-                      }`}
-                    >
-                      {workflow.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                  <span className="text-sm text-white/40 font-mono">
+              <Card className="h-full flex flex-col justify-between transition-all duration-300 group-hover:scale-[1.02] group-hover:shadow-[0_0_30px_rgba(138,63,252,0.2)]">
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2 truncate">
+                    {workflow.name}
+                  </h3>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                      workflow.is_active
+                        ? 'bg-[#00F5A0]/20 text-[#00F5A0] border-[#00F5A0]/30'
+                        : 'bg-white/10 text-white/50 border-white/20'
+                    }`}
+                  >
+                    {workflow.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center mt-6 pt-4 border-t border-white/10">
+                  <span className="text-xs text-white/40 font-mono">
                     {new Date(workflow.created_at).toLocaleDateString()}
                   </span>
+                  <div className="flex space-x-1">
+                    <button
+                      onClick={(e) =>
+                        handleRenameClick(e, workflow.id, workflow.name)
+                      }
+                      className="p-1 text-white/40 hover:text-white hover:bg-white/10 rounded-md transition-colors"
+                      title="Rename"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={(e) => handleDuplicateClick(e, workflow.id)}
+                      className="p-1 text-white/40 hover:text-white hover:bg-white/10 rounded-md transition-colors"
+                      title="Duplicate"
+                    >
+                      📄
+                    </button>
+                    <button
+                      onClick={(e) =>
+                        handleDeleteClick(e, workflow.id, workflow.name)
+                      }
+                      className="p-1 text-white/40 hover:text-red-400 hover:bg-white/10 rounded-md transition-colors"
+                      title="Delete"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
               </Card>
             </Link>
