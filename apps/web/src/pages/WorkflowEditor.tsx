@@ -327,7 +327,88 @@ const WorkflowEditorContent: React.FC = () => {
   const triggerType = triggerNode?.type
   const triggerConfig = triggerNode?.data?.config
 
-  if (isLoading) return <div>Loading...</div>
+  if (isLoading) {
+    return (
+      <div className="h-full flex overflow-hidden">
+        {/* Sidebar Skeleton */}
+        <aside className="w-64 h-full bg-white/5 border-r border-white/10 p-4 flex flex-col gap-4 z-20 animate-pulse flex-shrink-0">
+          {/* Workflow Name */}
+          <div className="flex flex-col gap-2">
+            <div className="h-3 w-24 bg-white/10 rounded" />
+            <div className="h-9 bg-white/5 border border-white/10 rounded-lg" />
+          </div>
+
+          {/* Status Toggle */}
+          <div className="h-9 bg-white/5 border border-white/10 rounded-lg" />
+
+          {/* Control Buttons */}
+          <div className="space-y-2">
+            <div className="h-10 bg-white/10 rounded-3xl" />
+            <div className="h-10 bg-white/10 rounded-3xl" />
+            <div className="h-9 bg-white/5 border border-white/10 rounded-md" />
+          </div>
+
+          <hr className="my-4 border-white/10" />
+
+          {/* Toolbox Title */}
+          <div className="h-4 w-16 bg-white/10 rounded" />
+
+          {/* Toolbox Items */}
+          <div className="space-y-3">
+            <div className="h-11 bg-white/5 border border-white/10 rounded-xl" />
+            <div className="h-11 bg-white/5 border border-white/10 rounded-xl" />
+            <div className="h-11 bg-white/5 border border-white/10 rounded-xl" />
+          </div>
+        </aside>
+
+        {/* Canvas Area Skeleton */}
+        <div className="flex-1 relative bg-[#0D0E12] overflow-hidden">
+          {/* Dotted Grid Background */}
+          <div
+            className="absolute inset-0 opacity-10 pointer-events-none"
+            style={{
+              backgroundImage:
+                'radial-gradient(circle, #ffffff 1px, transparent 1px)',
+              backgroundSize: '16px 16px',
+            }}
+          />
+
+          {/* Floating Nodes Skeleton */}
+          <div className="absolute inset-0 flex items-center justify-center gap-10 md:gap-20">
+            {/* Mock Node 1 */}
+            <div className="w-52 h-24 bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-between animate-pulse shadow-xl relative">
+              <div>
+                <div className="h-3 w-16 bg-white/10 rounded mb-2" />
+                <div className="h-4 w-32 bg-white/10 rounded" />
+              </div>
+              <div className="h-2 w-full bg-white/10 rounded-full" />
+              <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white/20 border-2 border-white/30 rounded-full" />
+            </div>
+
+            {/* SVG Connecting Arrow */}
+            <svg
+              className="w-24 h-8 text-white/10 animate-pulse hidden md:block"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M0 16 h80 m-10 -6 l10 6 l-10 6" />
+            </svg>
+
+            {/* Mock Node 2 */}
+            <div className="w-52 h-24 bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-between animate-pulse shadow-xl relative">
+              <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-white/20 border-2 border-white/30 rounded-full" />
+              <div>
+                <div className="h-3 w-16 bg-white/10 rounded mb-2" />
+                <div className="h-4 w-32 bg-white/10 rounded" />
+              </div>
+              <div className="h-2 w-full bg-white/10 rounded-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="h-full flex">
