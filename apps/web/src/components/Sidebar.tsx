@@ -5,6 +5,8 @@ import { GlobalSettingsModal } from './GlobalSettingsModal'
 export const Sidebar: React.FC<{
   workflowName: string
   onChangeName: (name: string) => void
+  isActive: boolean
+  onChangeActive: (active: boolean) => void
   onSave: () => void
   onTest: () => void
   isSaving?: boolean
@@ -12,6 +14,8 @@ export const Sidebar: React.FC<{
 }> = ({
   workflowName,
   onChangeName,
+  isActive,
+  onChangeActive,
   onSave,
   onTest,
   isSaving = false,
@@ -26,7 +30,7 @@ export const Sidebar: React.FC<{
 
   return (
     <aside className="w-64 bg-white/5 backdrop-blur-xl border-r border-white/10 p-4 flex flex-col gap-4 z-20">
-      <div className="flex flex-col gap-1 mb-2">
+      <div className="flex flex-col gap-1 mb-1">
         <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">
           Workflow Name
         </label>
@@ -37,6 +41,21 @@ export const Sidebar: React.FC<{
           className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#8A3FFC] focus:bg-white/10 transition-all duration-300"
           placeholder="Workflow Name"
         />
+      </div>
+
+      <div className="flex items-center justify-between mb-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+        <span className="text-xs font-semibold text-white/70 uppercase tracking-wider">
+          Status: {isActive ? 'Active' : 'Paused'}
+        </span>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isActive}
+            onChange={(e) => onChangeActive(e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-9 h-5 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-[#8A3FFC] peer-checked:to-[#E02DFF]"></div>
+        </label>
       </div>
       <div className="space-y-2">
         <Button

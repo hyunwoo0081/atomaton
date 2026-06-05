@@ -149,6 +149,26 @@ export const Dashboard: React.FC = () => {
     }
   }
 
+  const handleToggleActiveClick = async (
+    e: React.MouseEvent,
+    id: string,
+    currentStatus: boolean
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    try {
+      await api.put(`/workflows/${id}`, { is_active: !currentStatus })
+      refetchWorkflows()
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to update workflow status'
+      alert(message)
+    }
+  }
+
   if (isLoading) {
     return <div className="p-8 text-white">Loading...</div>
   }
@@ -193,6 +213,23 @@ export const Dashboard: React.FC = () => {
                     {new Date(workflow.created_at).toLocaleDateString()}
                   </span>
                   <div className="flex space-x-1">
+                    <button
+                      onClick={(e) =>
+                        handleToggleActiveClick(
+                          e,
+                          workflow.id,
+                          workflow.is_active
+                        )
+                      }
+                      className={`p-1 rounded-md transition-colors ${
+                        workflow.is_active
+                          ? 'text-yellow-400 hover:bg-white/10'
+                          : 'text-green-400 hover:bg-white/10'
+                      }`}
+                      title={workflow.is_active ? 'Pause' : 'Activate'}
+                    >
+                      {workflow.is_active ? '⏸️' : '▶️'}
+                    </button>
                     <button
                       onClick={(e) =>
                         handleRenameClick(e, workflow.id, workflow.name)

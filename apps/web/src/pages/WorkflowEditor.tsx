@@ -42,6 +42,7 @@ const WorkflowEditorContent: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const [isTestModalOpen, setIsTestModalOpen] = useState(false)
   const [workflowName, setWorkflowName] = useState('')
+  const [isActive, setIsActive] = useState(true)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const reactFlowInstance = useReactFlow()
   const queryClient = useQueryClient()
@@ -132,6 +133,9 @@ const WorkflowEditorContent: React.FC = () => {
       if (workflow.name) {
         setWorkflowName(workflow.name)
       }
+      if (workflow.is_active !== undefined) {
+        setIsActive(workflow.is_active)
+      }
       setIsDirty(false)
     }
   }, [workflow, setNodes, setEdges, updateGlobalSettings, setIsDirty])
@@ -167,6 +171,7 @@ const WorkflowEditorContent: React.FC = () => {
   const saveWorkflowMutation = useMutation({
     mutationFn: (data: {
       name: string
+      is_active: boolean
       nodes: Node<CustomNodeData>[]
       edges: Edge[]
       globalSettings: GlobalSettings
@@ -288,6 +293,7 @@ const WorkflowEditorContent: React.FC = () => {
 
     saveWorkflowMutation.mutate({
       name: workflowName,
+      is_active: isActive,
       nodes,
       edges,
       globalSettings,
@@ -329,6 +335,11 @@ const WorkflowEditorContent: React.FC = () => {
         workflowName={workflowName}
         onChangeName={(newName) => {
           setWorkflowName(newName)
+          setIsDirty(true)
+        }}
+        isActive={isActive}
+        onChangeActive={(active) => {
+          setIsActive(active)
           setIsDirty(true)
         }}
         onSave={handleSaveWorkflow}
