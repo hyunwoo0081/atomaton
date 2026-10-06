@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import express, { Request, Response } from 'express'
-import cors from 'cors'
+import { corsMiddleware } from './middleware/cors'
 import authRouter from './routes/auth'
 import workflowRouter from './routes/workflow'
 import accountRouter from './routes/account'
@@ -19,13 +19,7 @@ import swaggerDocument from './swagger.json'
 const app = express()
 const port = process.env.PORT || 3010
 
-app.use(
-  cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    optionsSuccessStatus: 200,
-  })
-)
+app.use(corsMiddleware)
 
 app.use(express.json())
 
