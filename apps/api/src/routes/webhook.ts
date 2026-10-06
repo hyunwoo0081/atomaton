@@ -1,8 +1,18 @@
-import { Router } from 'express';
-import { processWebhook } from '../controllers/webhook';
+import { Router } from 'express'
+import cors from 'cors'
+import { processWebhook } from '../controllers/webhook'
 
-const router = Router();
+const router = Router()
 
-router.post('/:accountId/:triggerId', processWebhook);
+// Explicitly enable CORS and preflight handling for external webhooks
+router.use(
+  cors({
+    origin: '*',
+    methods: ['POST', 'OPTIONS'],
+    optionsSuccessStatus: 200,
+  })
+)
 
-export default router;
+router.post('/:accountId/:triggerId', processWebhook)
+
+export default router
