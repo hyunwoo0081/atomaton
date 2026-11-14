@@ -28,9 +28,22 @@ const NODE_TYPES: NodeType[] = [
     category: 'Logic',
   },
   {
+    type: 'condition-ai',
+    label: 'AI Condition (LLM)',
+    description: 'Branch flow (True/False) based on intelligent AI evaluation.',
+    category: 'Logic',
+  },
+  {
     type: 'action',
     label: 'Discord Webhook',
     description: 'Send a message to Discord.',
+    category: 'Action',
+  },
+  {
+    type: 'action-ai',
+    label: 'AI Generation (LLM)',
+    description:
+      'Generate, summarize, or extract text with AI (OpenAI / AGY API).',
     category: 'Action',
   },
   {

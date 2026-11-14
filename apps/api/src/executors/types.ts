@@ -14,6 +14,7 @@ export interface WorkflowContext {
   data: WorkflowData
   results: Record<string, ActionResult>
   retryCount?: number
+  startNodeId?: string
 }
 
 export interface ActionResult {
@@ -109,6 +110,48 @@ export interface UrlDecodeActionConfig {
   outputVariable: string
 }
 
+export interface AiGenerateActionConfig {
+  baseUrl?: string
+  apiKey?: string
+  model?: string
+  systemPrompt?: string
+  prompt: string
+  temperature?: number
+  responseFormat?: 'text' | 'json'
+  outputVariable: string
+  customHeaders?: Record<string, string>
+}
+
+export interface AiConditionConfig {
+  baseUrl?: string
+  apiKey?: string
+  model?: string
+  systemPrompt?: string
+  inputText: string
+  criteria: string
+  reasoningVariable?: string
+  customHeaders?: Record<string, string>
+}
+
+export interface TriggerNodeConfig {
+  nodeId?: string
+  accountId?: string
+  mailbox?: string
+  interval?: number
+  rules?: ConditionRule[]
+  samplePayload?: string
+}
+
+export interface WebhookTriggerNodeConfig {
+  nodeId?: string
+  webhookUrl?: string
+  webhookToken?: string
+  apiKey?: string
+  samplePayload?: string
+  allowedIps?: string[]
+  allowedOrigins?: string[]
+}
+
 export type ActionConfig =
   | DiscordActionConfig
   | NotionActionConfig
@@ -117,6 +160,10 @@ export type ActionConfig =
   | RegexReplaceActionConfig
   | GoogleBridgeActionConfig
   | UrlDecodeActionConfig
+  | AiGenerateActionConfig
+  | AiConditionConfig
+  | TriggerNodeConfig
+  | WebhookTriggerNodeConfig
   | Record<string, unknown>
 
 export interface GlobalSettings {
@@ -132,7 +179,13 @@ export interface WorkflowNode {
     | 'action'
     | 'action-notion'
     | 'action-http'
+    | 'action-regex-replace'
+    | 'action-google-bridge'
+    | 'action-url-decode'
+    | 'action-ai'
     | 'condition'
+    | 'condition-ai'
+    | 'trigger'
     | 'trigger-webhook'
     | string
   data: {

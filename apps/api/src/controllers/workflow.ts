@@ -42,11 +42,15 @@ export const getWorkflows = async (req: Request, res: Response) => {
     const workflows = await prisma.workflow.findMany({
       where: { userId },
       include: {
-        trigger: { include: { rules: true } },
+        triggers: { include: { rules: true } },
         actions: true,
       },
     })
-    res.status(200).json(workflows)
+    const formatted = workflows.map((w) => ({
+      ...w,
+      trigger: w.triggers && w.triggers.length > 0 ? w.triggers[0] : null,
+    }))
+    res.status(200).json(formatted)
   } catch (error: unknown) {
     console.error('Error fetching workflows:', error)
     res.status(500).json({ message: 'Internal server error' })
@@ -62,13 +66,20 @@ export const getWorkflowById = async (req: Request, res: Response) => {
     const workflow = await prisma.workflow.findUnique({
       where: { id, userId },
       include: {
-        trigger: { include: { rules: true } },
+        triggers: { include: { rules: true } },
         actions: true,
       },
     })
     if (!workflow)
-      return res.status(440).json({ message: 'Workflow not found' })
-    res.status(200).json(workflow)
+      return res.status(404).json({ message: 'Workflow not found' })
+    const formatted = {
+      ...workflow,
+      trigger:
+        workflow.triggers && workflow.triggers.length > 0
+          ? workflow.triggers[0]
+          : null,
+    }
+    res.status(200).json(formatted)
   } catch (error: unknown) {
     console.error('Error fetching workflow:', error)
     res.status(500).json({ message: 'Internal server error' })
@@ -170,53 +181,76 @@ export const updateWorkflow = async (req: Request, res: Response) => {
     if (nodes && edges) {
       await prisma.$transaction(
         async (tx) => {
-          const existingTrigger = await tx.trigger.findUnique({
+          const existingTriggers = await tx.trigger.findMany({
             where: { workflowId: id },
           })
 
-          const triggerNode = nodes.find((n) => n.type.startsWith('trigger'))
-          if (triggerNode) {
-            const config = triggerNode.data?.config as unknown as
-              | {
-                  accountId?: string
-                }
-              | undefined
-            if (triggerNode.type === 'trigger-webhook' || config?.accountId) {
-              const triggerData = {
-                type:
-                  triggerNode.type === 'trigger-webhook'
-                    ? 'WEBHOOK'
-                    : 'IMAP_POLLING',
-                config: triggerNode.data
-                  .config as unknown as Prisma.InputJsonValue,
-              }
+          const triggerNodes = nodes.filter((n) => n.type.startsWith('trigger'))
+          const currentTriggerNodeIds = new Set(triggerNodes.map((n) => n.id))
 
-              if (existingTrigger) {
-                await tx.trigger.update({
-                  where: { id: existingTrigger.id },
-                  data: triggerData,
-                })
-              } else {
-                await tx.trigger.create({
-                  data: {
-                    ...triggerData,
-                    workflowId: id,
-                  },
-                })
-              }
-            } else {
-              if (existingTrigger) {
-                await tx.trigger.delete({
-                  where: { id: existingTrigger.id },
-                })
-              }
+          // 1. Delete triggers whose nodeId is no longer in current trigger nodes
+          const triggersToDelete = existingTriggers.filter(
+            (t) => t.nodeId && !currentTriggerNodeIds.has(t.nodeId)
+          )
+          if (triggersToDelete.length > 0) {
+            await tx.trigger.deleteMany({
+              where: { id: { in: triggersToDelete.map((t) => t.id) } },
+            })
+          }
+
+          // Unmatched pool for legacy triggers without nodeId
+          const unmatchedLegacyTriggers = existingTriggers.filter(
+            (t) => !t.nodeId
+          )
+
+          // 2. Synchronize each trigger node
+          for (const node of triggerNodes) {
+            const config = node.data?.config as
+              | Record<string, unknown>
+              | undefined
+            const isValidTrigger =
+              node.type === 'trigger-webhook' || !!config?.accountId
+            if (!isValidTrigger) continue
+
+            const triggerType =
+              node.type === 'trigger-webhook' ? 'WEBHOOK' : 'IMAP_POLLING'
+            const webhookToken =
+              typeof config?.webhookToken === 'string'
+                ? config.webhookToken
+                : undefined
+
+            const existingByNodeId = existingTriggers.find(
+              (t) => t.nodeId === node.id
+            )
+            const existing = existingByNodeId || unmatchedLegacyTriggers.shift()
+
+            const triggerData = {
+              type: triggerType,
+              config: node.data.config as unknown as Prisma.InputJsonValue,
+              nodeId: node.id,
+              webhookToken: webhookToken || existing?.webhookToken || null,
             }
-          } else {
-            if (existingTrigger) {
-              await tx.trigger.delete({
-                where: { id: existingTrigger.id },
+
+            if (existing) {
+              await tx.trigger.update({
+                where: { id: existing.id },
+                data: triggerData,
+              })
+            } else {
+              await tx.trigger.create({
+                data: {
+                  ...triggerData,
+                  workflowId: id,
+                },
               })
             }
+          }
+
+          // If there are no trigger nodes at all, delete all remaining triggers
+          if (triggerNodes.length === 0 && existingTriggers.length > 0) {
+            await tx.trigger.deleteMany({
+              where: { id: { in: existingTriggers.map((t) => t.id) } },
+            })
           }
 
           // 1. Fetch existing actions in transaction
@@ -325,9 +359,24 @@ export const updateWorkflow = async (req: Request, res: Response) => {
 
     const updatedWorkflow = await prisma.workflow.findUnique({
       where: { id, userId },
-      include: { trigger: true, actions: true },
+      include: { triggers: true, actions: true },
     })
-    res.status(200).json(updatedWorkflow)
+    const raw = updatedWorkflow as unknown as {
+      triggers?: unknown[]
+      trigger?: unknown
+    } | null
+    const formatted = updatedWorkflow
+      ? {
+          ...updatedWorkflow,
+          trigger:
+            raw?.triggers && raw.triggers.length > 0
+              ? raw.triggers[0]
+              : raw?.trigger !== undefined
+                ? raw.trigger
+                : null,
+        }
+      : null
+    res.status(200).json(formatted)
   } catch (error: unknown) {
     console.error('Error updating workflow:', error)
     res.status(500).json({ message: 'Internal server error' })
@@ -384,7 +433,7 @@ export const duplicateWorkflow = async (req: Request, res: Response) => {
         sourceWorkflow = await prisma.workflow.findUnique({
           where: { id, userId },
           include: {
-            trigger: { include: { rules: true } },
+            triggers: { include: { rules: true } },
             actions: true,
           },
         })
@@ -419,20 +468,43 @@ export const duplicateWorkflow = async (req: Request, res: Response) => {
             },
           })
 
-          if (sourceWorkflow.trigger) {
+          interface SourceTrigger {
+            id: string
+            type: string
+            nodeId?: string | null
+            webhookToken?: string | null
+            config: Prisma.InputJsonValue
+            rules?: { field: string; operator: string; value: string }[]
+          }
+
+          const rawWorkflow = sourceWorkflow as unknown as {
+            triggers?: SourceTrigger[]
+            trigger?: SourceTrigger
+          }
+          const triggersList: SourceTrigger[] = rawWorkflow.triggers
+            ? rawWorkflow.triggers
+            : rawWorkflow.trigger
+              ? [rawWorkflow.trigger]
+              : []
+
+          for (const srcTrigger of triggersList) {
+            const newWebhookToken =
+              srcTrigger.type === 'WEBHOOK'
+                ? 'wh_' + uuidv4().replace(/-/g, '')
+                : null
+
             const triggerCopy = await tx.trigger.create({
               data: {
                 workflowId: workflowCopy.id,
-                type: sourceWorkflow.trigger.type,
-                config: sourceWorkflow.trigger.config || Prisma.JsonNull,
+                type: srcTrigger.type,
+                nodeId: srcTrigger.nodeId || null,
+                webhookToken: newWebhookToken,
+                config: srcTrigger.config || Prisma.JsonNull,
               },
             })
 
-            if (
-              sourceWorkflow.trigger.rules &&
-              sourceWorkflow.trigger.rules.length > 0
-            ) {
-              const rulesData = sourceWorkflow.trigger.rules.map((rule) => ({
+            if (srcTrigger.rules && srcTrigger.rules.length > 0) {
+              const rulesData = srcTrigger.rules.map((rule) => ({
                 triggerId: triggerCopy.id,
                 field: rule.field,
                 operator: rule.operator,
@@ -474,10 +546,11 @@ export const duplicateWorkflow = async (req: Request, res: Response) => {
 
 export const testWorkflow = async (req: Request, res: Response) => {
   const { id } = req.params
-  const { nodes, edges, inputData } = req.body as {
+  const { nodes, edges, inputData, startNodeId } = req.body as {
     nodes: WorkflowNode[]
     edges: WorkflowEdge[]
     inputData: Record<string, unknown>
+    startNodeId?: string
   }
   const userId = req.userId
   if (!userId) return res.status(401).json({ message: 'Unauthorized' })
@@ -487,6 +560,7 @@ export const testWorkflow = async (req: Request, res: Response) => {
     const context = {
       workflowId: id,
       triggerId: 'test-trigger',
+      startNodeId: startNodeId || undefined,
       executionId,
       data: inputData,
       results: {},

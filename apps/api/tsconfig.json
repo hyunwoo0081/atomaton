@@ -12,6 +12,7 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
+      "@atomaton/db": ["../../packages/db/dist/src/index"],
       "@atomaton/db/*": ["../../packages/db/dist/src/*"]
     }
   },

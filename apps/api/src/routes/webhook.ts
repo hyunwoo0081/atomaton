@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import cors from 'cors'
-import { processWebhook } from '../controllers/webhook'
+import { processWebhook, processWebhookByToken } from '../controllers/webhook'
 
 const router = Router()
 
@@ -13,6 +13,10 @@ router.use(
   })
 )
 
+// Legacy endpoint (Account ID & Trigger ID with Bearer header)
 router.post('/:accountId/:triggerId', processWebhook)
+
+// Modern standard endpoint (Single Capability Token)
+router.post('/:webhookToken', processWebhookByToken)
 
 export default router

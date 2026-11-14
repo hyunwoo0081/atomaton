@@ -107,7 +107,9 @@ const WorkflowEditorContent: React.FC = () => {
       'action-regex-replace': ActionNode,
       'action-google-bridge': ActionNode,
       'action-url-decode': ActionNode,
+      'action-ai': ActionNode,
       condition: ConditionNode,
+      'condition-ai': ConditionNode,
     }),
     []
   )
@@ -215,9 +217,10 @@ const WorkflowEditorContent: React.FC = () => {
             break
           }
           case 'trigger-webhook': {
-            if (!(config as WebhookTriggerNodeConfig).apiKey) {
+            const webhookConfig = config as WebhookTriggerNodeConfig
+            if (!webhookConfig.apiKey && !webhookConfig.webhookToken) {
               isNodeValid = false
-              missingFields.push('API Key')
+              missingFields.push('API Key / Webhook Token')
             }
             break
           }
@@ -301,7 +304,8 @@ const WorkflowEditorContent: React.FC = () => {
   }
 
   const handleRunTest = async (
-    inputData: Record<string, string | number | boolean | null>
+    inputData: Record<string, unknown>,
+    startNodeId?: string
   ): Promise<TestResult> => {
     if (!id) throw new Error('Workflow ID is missing for test run.')
     try {
@@ -309,6 +313,7 @@ const WorkflowEditorContent: React.FC = () => {
         nodes,
         edges,
         inputData,
+        startNodeId,
       })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Test run failed'
@@ -486,7 +491,10 @@ const WorkflowEditorContent: React.FC = () => {
           onSave={handleConfigSave}
           onClose={() => setSelectedNodeId(null)}
           userId={workflow?.userId}
-          triggerId={workflow?.trigger?.id}
+          triggerId={
+            workflow?.triggers?.find((t) => t.nodeId === selectedNode.id)?.id ||
+            workflow?.trigger?.id
+          }
           onSaveWorkflow={handleSaveWorkflow}
           triggerType={triggerType}
           triggerConfig={triggerConfig}
@@ -502,6 +510,7 @@ const WorkflowEditorContent: React.FC = () => {
 
       <TestRunModal
         isOpen={isTestModalOpen}
+        nodes={nodes}
         onClose={() => setIsTestModalOpen(false)}
         onRun={handleRunTest}
       />

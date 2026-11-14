@@ -1,7 +1,7 @@
-import prisma from './client';
+import prisma from './client'
 
-export * from '@prisma/client';
-export * from './client';
-export * from './crypto';
+export * from './generated/client'
+export * from './client'
+export * from './crypto'
 
-export default prisma;
+export default prisma

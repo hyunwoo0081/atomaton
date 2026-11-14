@@ -9,7 +9,7 @@
     "./crypto": "./dist/src/crypto.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-generated.cjs",
     "postinstall": "prisma generate"
   },
   "prisma": {

@@ -1,7 +1,7 @@
 // apps/api/src/executors/__tests__/executor.spec.ts
 process.env.MASTER_KEY = 'this_is_a_32_byte_test_key_!!!!'
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import axios from 'axios'
 import {
   applyTemplate,
@@ -11,24 +11,41 @@ import {
   executeRegexReplaceAction,
   executeGoogleBridgeAction,
   executeUrlDecodeAction,
+  executeWorkflow,
 } from '../executor'
 import {
   WorkflowContext,
   WorkflowNode,
   ConditionConfig,
+  DiscordActionConfig,
+  HttpActionConfig,
   ActionConfig,
   RegexReplaceActionConfig,
   GoogleBridgeActionConfig,
   UrlDecodeActionConfig,
+  UIConfig,
 } from '../types'
 
 vi.mock('axios', () => {
+  const mockAxios = Object.assign(vi.fn(), {
+    post: vi.fn(),
+    isAxiosError: vi.fn(() => false),
+  })
   return {
-    default: {
-      post: vi.fn(),
-    },
+    default: mockAxios,
   }
 })
+
+vi.mock('@atomaton/db', () => ({
+  default: {
+    workflow: { findUnique: vi.fn() },
+    log: {
+      create: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+  },
+  LogStatus: { SUCCESS: 'SUCCESS', FAILURE: 'FAILURE' },
+}))
 
 describe('Executor Utilities', () => {
   describe('applyTemplate', () => {
@@ -477,6 +494,317 @@ describe('Executor Utilities', () => {
       expect(result.success).toBe(true)
       expect(result.extractedVariables?.decodedText).toBe(
         'Link 1: https://example.com/search?q=방경 and Link 2: http://test.com/path to file'
+      )
+    })
+  })
+
+  describe('executeWorkflow with startNodeId (Multi-trigger support)', () => {
+    it('should start execution specifically from startNodeId when provided', async () => {
+      const uiConfig: UIConfig = {
+        nodes: [
+          {
+            id: 'trig-1',
+            type: 'trigger-webhook',
+            data: { label: 'Webhook 1', config: {} },
+          },
+          {
+            id: 'trig-2',
+            type: 'trigger-webhook',
+            data: { label: 'Webhook 2', config: {} },
+          },
+          {
+            id: 'action-1',
+            type: 'action-url-decode',
+            data: {
+              label: 'Action 1',
+              config: {
+                inputText: 'http://test.com/%ED%95%9C%EA%B8%80',
+                outputVariable: 'res1',
+              } as UrlDecodeActionConfig,
+            },
+          },
+          {
+            id: 'action-2',
+            type: 'action-url-decode',
+            data: {
+              label: 'Action 2',
+              config: {
+                inputText: 'http://test.com/%EC%84%B1%EA%B3%B5',
+                outputVariable: 'res2',
+              } as UrlDecodeActionConfig,
+            },
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 'trig-1', target: 'action-1' },
+          { id: 'e2', source: 'trig-2', target: 'action-2' },
+        ],
+      }
+
+      const context: WorkflowContext = {
+        workflowId: 'wf-multi',
+        triggerId: 'trig-db-2',
+        executionId: 'ex-2',
+        startNodeId: 'trig-2',
+        data: {},
+        results: {},
+      }
+
+      const logs = await executeWorkflow(context, uiConfig)
+      expect(logs).toBeDefined()
+
+      // Only action-2 should have been executed, action-1 should NOT be executed
+      const actionIds = logs?.map((l) => l.actionId)
+      expect(actionIds).toContain('action-2')
+      expect(actionIds).not.toContain('action-1')
+    })
+  })
+
+  describe('Trigger sample injection ({{trigger.xxx}} template & condition resolution)', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    it('should resolve {{trigger.subject}}, {{trigger.from}}, and custom injected fields across conditions, regex, HTTP, and Discord actions', async () => {
+      const uiConfig: UIConfig = {
+        nodes: [
+          {
+            id: 'imap-trig-1',
+            type: 'trigger',
+            data: {
+              label: 'IMAP Email',
+              config: {
+                accountId: 'acc-1',
+                samplePayload: JSON.stringify({
+                  subject: 'Urgent Invoice',
+                  from: 'billing@example.com',
+                  customTag: 'VIP',
+                }),
+              },
+            },
+          },
+          {
+            id: 'cond-1',
+            type: 'condition',
+            data: {
+              label: 'Check Trigger Fields',
+              config: {
+                logicType: 'AND',
+                conditions: [
+                  {
+                    field: 'trigger.subject',
+                    operator: 'contains',
+                    value: 'Invoice',
+                  },
+                  {
+                    field: 'trigger.from',
+                    operator: 'equals',
+                    value: '{{trigger.expectedSender}}',
+                  },
+                ],
+              } as ConditionConfig,
+            },
+          },
+          {
+            id: 'regex-1',
+            type: 'action-regex-replace',
+            data: {
+              label: 'Format Subject',
+              config: {
+                inputText: '[{{trigger.customTag}}] {{trigger.subject}}',
+                rules: [{ pattern: 'Urgent', replacement: 'Priority' }],
+                outputVariable: 'formattedSubject',
+              } as RegexReplaceActionConfig,
+            },
+          },
+          {
+            id: 'http-1',
+            type: 'action-http',
+            data: {
+              label: 'Forward via HTTP',
+              config: {
+                method: 'POST',
+                url: 'https://api.example.com/notify?sender={{trigger.from}}',
+                body: JSON.stringify({
+                  subject: '{{formattedSubject}}',
+                  sender: '{{trigger.from}}',
+                }),
+              } as HttpActionConfig,
+            },
+          },
+          {
+            id: 'discord-1',
+            type: 'action',
+            data: {
+              label: 'Send Discord Alert',
+              config: {
+                webhookUrl: 'https://discord.com/api/webhooks/test',
+                content:
+                  'Mail from {{trigger.from}}: {{formattedSubject}} ({{trigger.customTag}})',
+              } as DiscordActionConfig,
+            },
+          },
+          {
+            id: 'discord-false',
+            type: 'action',
+            data: {
+              label: 'Fallback False Branch',
+              config: {
+                webhookUrl: 'https://discord.com/api/webhooks/false',
+                content: 'Should not run',
+              } as DiscordActionConfig,
+            },
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 'imap-trig-1', target: 'cond-1' },
+          {
+            id: 'e2',
+            source: 'cond-1',
+            sourceHandle: 'true',
+            target: 'regex-1',
+          },
+          {
+            id: 'e3',
+            source: 'cond-1',
+            sourceHandle: 'false',
+            target: 'discord-false',
+          },
+          { id: 'e4', source: 'regex-1', target: 'http-1' },
+          { id: 'e5', source: 'http-1', target: 'discord-1' },
+        ],
+      }
+
+      const mockedAxios = vi.mocked(axios) as unknown as ReturnType<
+        typeof vi.fn
+      >
+      mockedAxios.mockResolvedValueOnce({ status: 200, data: { ok: true } })
+      vi.mocked(axios.post).mockResolvedValueOnce({ status: 204, data: {} })
+
+      const context: WorkflowContext = {
+        workflowId: 'wf-sim-1',
+        triggerId: 'test-trigger',
+        startNodeId: 'imap-trig-1',
+        executionId: 'ex-sim-1',
+        data: {
+          subject: 'Urgent Invoice #42',
+          from: 'billing@example.com',
+          expectedSender: 'billing@example.com',
+          customTag: 'VIP',
+          body: 'Please review invoice #42.',
+        },
+        results: {},
+      }
+
+      const logs = await executeWorkflow(context, uiConfig)
+
+      expect(logs).toBeDefined()
+      expect(logs?.every((l) => l.status === 'SUCCESS')).toBe(true)
+
+      const executedIds = logs?.map((l) => l.actionId)
+      expect(executedIds).toEqual(['cond-1', 'regex-1', 'http-1', 'discord-1'])
+      expect(executedIds).not.toContain('discord-false')
+
+      expect(mockedAxios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'POST',
+          url: 'https://api.example.com/notify?sender=billing@example.com',
+          data: {
+            subject: '[VIP] Priority Invoice #42',
+            sender: 'billing@example.com',
+          },
+        })
+      )
+
+      expect(axios.post).toHaveBeenCalledWith(
+        'https://discord.com/api/webhooks/test',
+        {
+          content:
+            'Mail from billing@example.com: [VIP] Priority Invoice #42 (VIP)',
+        }
+      )
+    })
+
+    it('should route to false branch when injected trigger sample fails condition on trigger.xxx', async () => {
+      const uiConfig: UIConfig = {
+        nodes: [
+          {
+            id: 'wh-trig-1',
+            type: 'trigger-webhook',
+            data: { label: 'Webhook', config: {} },
+          },
+          {
+            id: 'cond-1',
+            type: 'condition',
+            data: {
+              label: 'Amount Check',
+              config: {
+                logicType: 'AND',
+                conditions: [
+                  { field: 'trigger.amount', operator: 'gt', value: '50000' },
+                ],
+              } as ConditionConfig,
+            },
+          },
+          {
+            id: 'discord-true',
+            type: 'action',
+            data: {
+              label: 'High Amount',
+              config: {
+                webhookUrl: 'https://discord.com/api/webhooks/true',
+                content: 'High',
+              } as DiscordActionConfig,
+            },
+          },
+          {
+            id: 'discord-false',
+            type: 'action',
+            data: {
+              label: 'Normal Amount',
+              config: {
+                webhookUrl: 'https://discord.com/api/webhooks/false',
+                content: 'Normal amount: {{trigger.amount}}',
+              } as DiscordActionConfig,
+            },
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 'wh-trig-1', target: 'cond-1' },
+          {
+            id: 'e2',
+            source: 'cond-1',
+            sourceHandle: 'true',
+            target: 'discord-true',
+          },
+          {
+            id: 'e3',
+            source: 'cond-1',
+            sourceHandle: 'false',
+            target: 'discord-false',
+          },
+        ],
+      }
+
+      vi.mocked(axios.post).mockResolvedValueOnce({ status: 204, data: {} })
+
+      const context: WorkflowContext = {
+        workflowId: 'wf-sim-2',
+        triggerId: 'test-trigger',
+        startNodeId: 'wh-trig-1',
+        executionId: 'ex-sim-2',
+        data: { amount: 25000 },
+        results: {},
+      }
+
+      const logs = await executeWorkflow(context, uiConfig)
+
+      expect(logs).toBeDefined()
+      const executedIds = logs?.map((l) => l.actionId)
+      expect(executedIds).toEqual(['cond-1', 'discord-false'])
+      expect(axios.post).toHaveBeenCalledWith(
+        'https://discord.com/api/webhooks/false',
+        { content: 'Normal amount: 25000' }
       )
     })
   })

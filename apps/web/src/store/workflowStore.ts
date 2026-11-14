@@ -31,6 +31,8 @@ import {
   WebhookTriggerNodeConfig,
   NotionActionConfig,
   HttpActionConfig,
+  AiGenerateActionConfig,
+  AiConditionConfig,
 } from '../types/workflow'
 
 interface WorkflowState {
@@ -210,7 +212,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
           }
           case 'trigger-webhook': {
             const trig = config as WebhookTriggerNodeConfig
-            nodeValid = !!trig.apiKey
+            nodeValid = !!trig.apiKey || !!trig.webhookToken
             break
           }
           case 'action': {
@@ -234,6 +236,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
               !!cond.conditions &&
               cond.conditions.length > 0 &&
               cond.conditions.every((c) => !!c.value)
+            break
+          }
+          case 'action-ai': {
+            const ai = config as AiGenerateActionConfig
+            nodeValid = !!ai.prompt && !!ai.outputVariable
+            break
+          }
+          case 'condition-ai': {
+            const aiCond = config as AiConditionConfig
+            nodeValid = !!aiCond.inputText && !!aiCond.criteria
             break
           }
           default:
@@ -299,6 +311,9 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     if (type === 'trigger-webhook') {
       ;(config as WebhookTriggerNodeConfig).apiKey =
         'at_' + uuidv4().replace(/-/g, '')
+      ;(config as WebhookTriggerNodeConfig).webhookToken =
+        'wh_' + uuidv4().replace(/-/g, '')
+      config.nodeId = newNodeId
     }
     const newNode: Node<CustomNodeData> = {
       id: newNodeId,

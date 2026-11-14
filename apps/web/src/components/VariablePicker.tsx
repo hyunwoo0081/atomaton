@@ -2,10 +2,13 @@ import React, { useMemo } from 'react'
 import type { Node, Edge } from 'reactflow'
 import type {
   NodeConfig,
+  TriggerNodeConfig,
   WebhookTriggerNodeConfig,
   RegexReplaceActionConfig,
   UrlDecodeActionConfig,
   HttpActionConfig,
+  AiGenerateActionConfig,
+  AiConditionConfig,
 } from '../types/workflow'
 
 // Recursively extract all paths from a JSON object (used for Webhook payloads)
@@ -82,14 +85,31 @@ function getVariablesForNode(node: Node): {
   const label = node.data?.label || node.id
 
   if (type === 'trigger') {
+    const emailConfig = config as TriggerNodeConfig
+    const defaultVars = [
+      'trigger.subject',
+      'trigger.from',
+      'trigger.date',
+      'trigger.body',
+    ]
+    const payloadStr = emailConfig?.samplePayload
+    if (payloadStr) {
+      try {
+        const parsed = JSON.parse(payloadStr)
+        const extractedVars = extractJsonPaths(parsed).map(
+          (p) => `trigger.${p}`
+        )
+        return {
+          label: `Email Trigger (${label})`,
+          variables: Array.from(new Set([...defaultVars, ...extractedVars])),
+        }
+      } catch {
+        // Fallback if parsing fails
+      }
+    }
     return {
       label: `Email Trigger (${label})`,
-      variables: [
-        'trigger.subject',
-        'trigger.from',
-        'trigger.date',
-        'trigger.body',
-      ],
+      variables: defaultVars,
     }
   }
 
@@ -144,6 +164,24 @@ function getVariablesForNode(node: Node): {
     return {
       label: `HTTP Request (${label})`,
       variables: ['http_response'],
+    }
+  }
+
+  if (type === 'action-ai') {
+    const aiConfig = config as AiGenerateActionConfig
+    const outVar = aiConfig?.outputVariable || 'ai_output'
+    return {
+      label: `AI Generate (${label})`,
+      variables: [outVar],
+    }
+  }
+
+  if (type === 'condition-ai') {
+    const aiCondConfig = config as AiConditionConfig
+    const outVar = aiCondConfig?.reasoningVariable || 'ai_reason'
+    return {
+      label: `AI Condition (${label})`,
+      variables: [outVar],
     }
   }
 

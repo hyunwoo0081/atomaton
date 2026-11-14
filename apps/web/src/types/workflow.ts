@@ -27,12 +27,111 @@ export interface TriggerNodeConfig extends BaseNodeConfig {
   mailbox?: string
   interval?: number
   rules?: ConditionRule[]
+  samplePayload?: string
+}
+
+export interface TriggerSamplePreset {
+  id: string
+  label: string
+  buildPayload: () => Record<string, unknown>
+}
+
+export const EMAIL_SAMPLE_PRESETS: TriggerSamplePreset[] = [
+  {
+    id: 'email-default',
+    label: '기본 이메일',
+    buildPayload: () => ({
+      subject: 'Test Email Subject',
+      from: 'test@example.com',
+      date: new Date().toISOString(),
+      body: 'This is a test email body.',
+      messageId: '<sample-msg-001@mail.naver.com>',
+      source: 'NAVER_IMAP',
+    }),
+  },
+  {
+    id: 'email-payment',
+    label: '결제/청구서 알림',
+    buildPayload: () => ({
+      subject: '[결제 완료] 25,000원 자동결제 안내',
+      from: 'billing@service.com',
+      date: new Date().toISOString(),
+      body: '고객님, 25,000원이 정상 결제되었습니다. 주문번호: ORD-20260101',
+      messageId: '<billing-msg-001@service.com>',
+      source: 'NAVER_IMAP',
+    }),
+  },
+  {
+    id: 'email-inquiry',
+    label: '문의 접수',
+    buildPayload: () => ({
+      subject: '[고객문의] API 연동 관련 질문드립니다',
+      from: 'customer@company.co.kr',
+      date: new Date().toISOString(),
+      body: '안녕하세요, 웹훅 연동 테스트 중 문의사항이 있어 연락드립니다.',
+      messageId: '<inquiry-msg-001@company.co.kr>',
+      source: 'NAVER_IMAP',
+    }),
+  },
+]
+
+export const WEBHOOK_SAMPLE_PRESETS: TriggerSamplePreset[] = [
+  {
+    id: 'webhook-default',
+    label: '기본 웹훅',
+    buildPayload: () => ({
+      event: 'test_webhook_event',
+      timestamp: new Date().toISOString(),
+      payload: {
+        id: 'test-123',
+        status: 'success',
+        message: 'Hello from test webhook',
+      },
+    }),
+  },
+  {
+    id: 'webhook-payment',
+    label: '결제 이벤트',
+    buildPayload: () => ({
+      event: 'payment.completed',
+      timestamp: new Date().toISOString(),
+      subject: 'Payment Received',
+      amount: 25000,
+      status: 'success',
+      orderId: 'ORD-20260101',
+    }),
+  },
+  {
+    id: 'webhook-gmail',
+    label: 'Gmail 동기화',
+    buildPayload: () => ({
+      subject: '[Gmail] 새 메일이 도착했습니다',
+      from: 'sender@gmail.com',
+      date: new Date().toISOString(),
+      body: 'Google Apps Script Gmail Sync 샘플 본문입니다.',
+    }),
+  },
+]
+
+/**
+ * Returns built-in sample payload presets for the given trigger node type.
+ */
+export const getTriggerSamplePresets = (
+  nodeType?: string
+): TriggerSamplePreset[] => {
+  if (nodeType === 'trigger-webhook') {
+    return WEBHOOK_SAMPLE_PRESETS
+  }
+  return EMAIL_SAMPLE_PRESETS
 }
 
 export interface WebhookTriggerNodeConfig extends BaseNodeConfig {
   webhookUrl?: string
+  webhookToken?: string
   apiKey?: string
   samplePayload?: string
+  allowedIps?: string[]
+  allowedOrigins?: string[]
 }
 
 export interface DiscordActionConfig extends BaseNodeConfig {
@@ -88,6 +187,29 @@ export interface UrlDecodeActionConfig extends BaseNodeConfig {
   outputVariable?: string
 }
 
+export interface AiGenerateActionConfig extends BaseNodeConfig {
+  baseUrl?: string
+  apiKey?: string
+  model?: string
+  systemPrompt?: string
+  prompt?: string
+  temperature?: number
+  responseFormat?: 'text' | 'json'
+  outputVariable?: string
+  customHeaders?: Record<string, string>
+}
+
+export interface AiConditionConfig extends BaseNodeConfig {
+  baseUrl?: string
+  apiKey?: string
+  model?: string
+  systemPrompt?: string
+  inputText?: string
+  criteria?: string
+  reasoningVariable?: string
+  customHeaders?: Record<string, string>
+}
+
 export type ActionConfig =
   | DiscordActionConfig
   | NotionActionConfig
@@ -96,6 +218,8 @@ export type ActionConfig =
   | RegexReplaceActionConfig
   | GoogleBridgeActionConfig
   | UrlDecodeActionConfig
+  | AiGenerateActionConfig
+  | AiConditionConfig
 
 export type NodeConfig =
   | TriggerNodeConfig
@@ -107,6 +231,8 @@ export type NodeConfig =
   | RegexReplaceActionConfig
   | GoogleBridgeActionConfig
   | UrlDecodeActionConfig
+  | AiGenerateActionConfig
+  | AiConditionConfig
 
 // --- Custom Node Data for React Flow ---
 export interface CustomNodeData {
@@ -172,6 +298,13 @@ export interface WorkflowBackendData {
     type: string
     config: NodeConfig
   } | null
+  triggers?: {
+    id: string
+    nodeId?: string
+    webhookToken?: string
+    type: string
+    config: NodeConfig
+  }[]
   actions: {
     id: string
     type: string

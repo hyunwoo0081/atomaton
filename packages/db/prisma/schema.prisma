@@ -3,6 +3,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../src/generated/client"
 }
 
 datasource db {
@@ -38,7 +39,7 @@ model Workflow {
   is_active  Boolean   @default(true)
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId     String
-  trigger    Trigger?
+  triggers   Trigger[]
   actions    Action[]
   logs       Log[]
   ui_config  Json?     // React Flow nodes & edges
@@ -48,14 +49,18 @@ model Workflow {
 }
 
 model Trigger {
-  id          String     @id @default(cuid())
-  workflow    Workflow   @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  workflowId  String     @unique
-  type        String // "IMAP_POLLING" or "WEBHOOK"
-  config      Json
-  rules       Rule[]
-  created_at  DateTime   @default(now())
-  updated_at  DateTime   @updatedAt
+  id           String     @id @default(cuid())
+  workflow     Workflow   @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowId   String
+  nodeId       String?
+  webhookToken String?    @unique
+  type         String // "IMAP_POLLING" or "WEBHOOK"
+  config       Json
+  rules        Rule[]
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @updatedAt
+
+  @@index([workflowId])
 }
 
 model Rule {

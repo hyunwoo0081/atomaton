@@ -13,6 +13,8 @@ import {
   RegexReplaceActionConfig,
   GoogleBridgeActionConfig,
   UrlDecodeActionConfig,
+  AiGenerateActionConfig,
+  AiConditionConfig,
 } from './types'
 import prisma, { Prisma, decrypt } from '@atomaton/db'
 import axios, { AxiosError } from 'axios'
@@ -159,9 +161,17 @@ export const resolvePath = (
 }
 
 export const getTemplateData = (context: WorkflowContext): WorkflowData => {
+  const triggerData =
+    context.data?.trigger &&
+    typeof context.data.trigger === 'object' &&
+    !Array.isArray(context.data.trigger)
+      ? (context.data.trigger as Record<string, unknown>)
+      : context.data
+
   return {
     ...context.data,
     data: context.data,
+    trigger: triggerData,
     results: context.results,
   }
 }
@@ -177,20 +187,21 @@ export const executeHttpRequestAction = async (
   if (!url || !method)
     return { success: false, message: 'HTTP URL or Method missing' }
 
-  const templatedUrl = applyTemplate(url, context.data)
+  const templateData = getTemplateData(context)
+  const templatedUrl = applyTemplate(url, templateData)
   const templatedHeaders: Record<string, string> = {}
   if (headers) {
     for (const key in headers) {
-      templatedHeaders[key] = applyTemplate(headers[key], context.data)
+      templatedHeaders[key] = applyTemplate(headers[key], templateData)
     }
   }
   let templatedBody: unknown = undefined
   if (body) {
     try {
       const parsed = JSON.parse(body)
-      templatedBody = resolveTemplates(parsed, context.data)
+      templatedBody = resolveTemplates(parsed, templateData)
     } catch {
-      const rawTemplated = applyTemplate(body, context.data)
+      const rawTemplated = applyTemplate(body, templateData)
       try {
         templatedBody = JSON.parse(rawTemplated)
       } catch {
@@ -264,7 +275,8 @@ export const executeDiscordAction = async (
   if (!webhookUrl || !content)
     return { success: false, message: 'Discord webhook URL or content missing' }
 
-  const templatedContent = applyTemplate(content, context.data)
+  const templateData = getTemplateData(context)
+  const templatedContent = applyTemplate(content, templateData)
   const chunks = splitDiscordMessage(templatedContent, 2000)
   const results: Record<string, unknown>[] = []
 
@@ -352,7 +364,10 @@ export const executeNotionAction = async (
     const notion = new Client({ auth: token })
 
     // Structural template application (immune to JSON injection)
-    const templatedProperties = resolveTemplates(properties, context.data)
+    const templatedProperties = resolveTemplates(
+      properties,
+      getTemplateData(context)
+    )
 
     const maxRetries = 5
     const retryDelays = [1000, 5000, 30000, 120000, 600000]
@@ -427,6 +442,9 @@ export const executeCondition = async (
     )
     if (dataValue === undefined) {
       dataValue = resolvePath(context.data, field)
+    }
+    if (dataValue === undefined) {
+      dataValue = resolvePath(templateData, field)
     }
 
     const resolvedValue = value ? applyTemplate(value, templateData) : ''
@@ -687,6 +705,312 @@ export const executeUrlDecodeAction = async (
   }
 }
 
+interface OpenAiChatCompletionChoice {
+  message?: {
+    content?: string | null
+    role?: string
+  }
+}
+
+interface OpenAiChatCompletionResponse {
+  choices?: OpenAiChatCompletionChoice[]
+}
+
+const resolveAiEndpoint = (baseUrl?: string): string => {
+  const url = (baseUrl || 'https://api.openai.com/v1').trim()
+  if (url.endsWith('/chat/completions')) return url
+  return `${url.replace(/\/+$/, '')}/chat/completions`
+}
+
+export const executeAiGenerateAction = async (
+  node: WorkflowNode,
+  context: WorkflowContext
+): Promise<ActionResult> => {
+  const config = node.data.config as AiGenerateActionConfig
+  const {
+    baseUrl,
+    apiKey,
+    model,
+    systemPrompt,
+    prompt,
+    temperature,
+    responseFormat,
+    outputVariable,
+    customHeaders,
+  } = config
+
+  if (!prompt) {
+    return { success: false, message: 'AI prompt is missing' }
+  }
+  if (!outputVariable) {
+    return { success: false, message: 'AI outputVariable is missing' }
+  }
+
+  const templateData = getTemplateData(context)
+  const resolvedBaseUrl = baseUrl
+    ? applyTemplate(baseUrl, templateData)
+    : undefined
+  const endpoint = resolveAiEndpoint(resolvedBaseUrl)
+  const resolvedPrompt = applyTemplate(prompt, templateData)
+
+  const messages: Array<{ role: 'system' | 'user'; content: string }> = []
+  if (systemPrompt) {
+    messages.push({
+      role: 'system',
+      content: applyTemplate(systemPrompt, templateData),
+    })
+  }
+  messages.push({
+    role: 'user',
+    content: resolvedPrompt,
+  })
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  const key = apiKey || process.env.OPENAI_API_KEY
+  if (key) {
+    headers['Authorization'] = `Bearer ${key}`
+  }
+  if (customHeaders) {
+    for (const [hKey, hVal] of Object.entries(customHeaders)) {
+      headers[hKey] = applyTemplate(hVal, templateData)
+    }
+  }
+
+  const requestBody: Record<string, unknown> = {
+    model: model || 'gpt-4o-mini',
+    messages,
+    temperature: typeof temperature === 'number' ? temperature : 0.7,
+  }
+  if (responseFormat === 'json') {
+    requestBody.response_format = { type: 'json_object' }
+  }
+
+  const maxRetries = 5
+  const retryDelays = [1000, 5000, 30000, 120000, 600000]
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, retryDelays[attempt - 1])
+        )
+      }
+
+      const response = await axios.post<OpenAiChatCompletionResponse>(
+        endpoint,
+        requestBody,
+        {
+          headers,
+          timeout: 60000,
+        }
+      )
+
+      if (response.status >= 200 && response.status < 300) {
+        const rawContent =
+          response.data?.choices?.[0]?.message?.content?.trim() ?? ''
+
+        let finalValue: unknown = rawContent
+        if (responseFormat === 'json') {
+          try {
+            finalValue = JSON.parse(rawContent)
+          } catch {
+            finalValue = rawContent
+          }
+        }
+
+        return {
+          success: true,
+          message: 'AI generation successful',
+          data: {
+            result: finalValue as Record<string, unknown> | string,
+            raw: rawContent,
+          },
+          extractedVariables: {
+            [outputVariable]: finalValue,
+          },
+        }
+      } else {
+        throw new Error(`AI API request failed with status: ${response.status}`)
+      }
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError
+      const status = axiosError.response?.status
+      const isRetryable =
+        (status && (status >= 500 || status === 429)) || !axiosError.response
+
+      if (isRetryable && attempt < maxRetries - 1) continue
+      return {
+        success: false,
+        message: `AI generation failed: ${getErrorMessage(error)}`,
+      }
+    }
+  }
+
+  return {
+    success: false,
+    message: 'AI generation failed after max retries',
+  }
+}
+
+export const executeAiCondition = async (
+  node: WorkflowNode,
+  context: WorkflowContext
+): Promise<ActionResult> => {
+  const config = node.data.config as AiConditionConfig
+  const {
+    baseUrl,
+    apiKey,
+    model,
+    systemPrompt,
+    inputText,
+    criteria,
+    reasoningVariable,
+    customHeaders,
+  } = config
+
+  if (!inputText) {
+    return { success: false, message: 'AI condition inputText is missing' }
+  }
+  if (!criteria) {
+    return { success: false, message: 'AI condition criteria is missing' }
+  }
+
+  const templateData = getTemplateData(context)
+  const resolvedBaseUrl = baseUrl
+    ? applyTemplate(baseUrl, templateData)
+    : undefined
+  const endpoint = resolveAiEndpoint(resolvedBaseUrl)
+  const resolvedInput = applyTemplate(inputText, templateData)
+  const resolvedCriteria = applyTemplate(criteria, templateData)
+
+  const defaultSystemPrompt =
+    'You are a strict boolean evaluation agent. Analyze the input against the criteria. ' +
+    'You MUST respond with ONLY a valid JSON object in the exact format: ' +
+    '{"result": true, "reason": "concise explanation"} or {"result": false, "reason": "concise explanation"}.'
+
+  const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+    {
+      role: 'system',
+      content: systemPrompt
+        ? `${applyTemplate(systemPrompt, templateData)}\n\n${defaultSystemPrompt}`
+        : defaultSystemPrompt,
+    },
+    {
+      role: 'user',
+      content: `[Input Text]\n${resolvedInput}\n\n[Criteria]\n${resolvedCriteria}`,
+    },
+  ]
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  const key = apiKey || process.env.OPENAI_API_KEY
+  if (key) {
+    headers['Authorization'] = `Bearer ${key}`
+  }
+  if (customHeaders) {
+    for (const [hKey, hVal] of Object.entries(customHeaders)) {
+      headers[hKey] = applyTemplate(hVal, templateData)
+    }
+  }
+
+  const requestBody: Record<string, unknown> = {
+    model: model || 'gpt-4o-mini',
+    messages,
+    temperature: 0.1,
+    response_format: { type: 'json_object' },
+  }
+
+  const maxRetries = 5
+  const retryDelays = [1000, 5000, 30000, 120000, 600000]
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      if (attempt > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, retryDelays[attempt - 1])
+        )
+      }
+
+      const response = await axios.post<OpenAiChatCompletionResponse>(
+        endpoint,
+        requestBody,
+        {
+          headers,
+          timeout: 60000,
+        }
+      )
+
+      if (response.status >= 200 && response.status < 300) {
+        const rawContent =
+          response.data?.choices?.[0]?.message?.content?.trim() ?? ''
+
+        let isMet = false
+        let reason = ''
+
+        try {
+          const cleanedJson = rawContent
+            .replace(/^```json\s*/i, '')
+            .replace(/^```\s*/i, '')
+            .replace(/\s*```$/, '')
+            .trim()
+          const parsed = JSON.parse(cleanedJson) as Record<string, unknown>
+          isMet = Boolean(parsed.result)
+          reason = typeof parsed.reason === 'string' ? parsed.reason : ''
+        } catch {
+          const lower = rawContent.toLowerCase()
+          if (
+            lower.includes('"result": true') ||
+            lower.includes('"result":true')
+          ) {
+            isMet = true
+          } else if (
+            lower.includes('"result": false') ||
+            lower.includes('"result":false')
+          ) {
+            isMet = false
+          } else {
+            isMet = lower.startsWith('true') || lower.startsWith('yes')
+          }
+          reason = rawContent
+        }
+
+        const extractedVariables: WorkflowData = {}
+        if (reasoningVariable) {
+          extractedVariables[reasoningVariable] = reason
+        }
+
+        return {
+          success: true,
+          message: `AI Condition evaluated to ${isMet}${reason ? `: ${reason}` : ''}`,
+          data: { result: isMet, reason },
+          extractedVariables,
+        }
+      } else {
+        throw new Error(`AI API request failed with status: ${response.status}`)
+      }
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError
+      const status = axiosError.response?.status
+      const isRetryable =
+        (status && (status >= 500 || status === 429)) || !axiosError.response
+
+      if (isRetryable && attempt < maxRetries - 1) continue
+      return {
+        success: false,
+        message: `AI condition failed: ${getErrorMessage(error)}`,
+      }
+    }
+  }
+
+  return {
+    success: false,
+    message: 'AI condition failed after max retries',
+  }
+}
+
 export const executeWorkflow = async (
   context: WorkflowContext,
   overrideWorkflowData?: UIConfig
@@ -705,7 +1029,9 @@ export const executeWorkflow = async (
     }
 
     const { nodes, edges } = uiConfig
-    const triggerNode = nodes.find((n) => n.type.startsWith('trigger'))
+    const triggerNode = context.startNodeId
+      ? nodes.find((n) => n.id === context.startNodeId)
+      : nodes.find((n) => n.type.startsWith('trigger'))
     if (!triggerNode) throw new Error('No trigger node found')
 
     const currentContext: WorkflowContext = { ...context }
@@ -769,10 +1095,38 @@ export const executeWorkflow = async (
           }
           break
         }
+        case 'action-ai': {
+          actionResult = await executeAiGenerateAction(node, currentContext)
+          if (actionResult.success && actionResult.extractedVariables) {
+            currentContext.data = {
+              ...currentContext.data,
+              ...actionResult.extractedVariables,
+            }
+          }
+          break
+        }
         case 'condition': {
           const conditionResult = await executeCondition(node, currentContext)
           actionResult = conditionResult
           nextHandle = conditionResult.data?.result ? 'true' : 'false'
+          break
+        }
+        case 'condition-ai': {
+          const aiConditionResult = await executeAiCondition(
+            node,
+            currentContext
+          )
+          actionResult = aiConditionResult
+          nextHandle = aiConditionResult.data?.result ? 'true' : 'false'
+          if (
+            aiConditionResult.success &&
+            aiConditionResult.extractedVariables
+          ) {
+            currentContext.data = {
+              ...currentContext.data,
+              ...aiConditionResult.extractedVariables,
+            }
+          }
           break
         }
       }
@@ -797,7 +1151,7 @@ export const executeWorkflow = async (
       if (actionResult.data) currentContext.results[nodeId] = actionResult
 
       const outgoingEdges = edges.filter((e) => e.source === nodeId)
-      if (node.type === 'condition') {
+      if (node.type === 'condition' || node.type === 'condition-ai') {
         const targetEdge = outgoingEdges.find(
           (e) => e.sourceHandle === nextHandle
         )

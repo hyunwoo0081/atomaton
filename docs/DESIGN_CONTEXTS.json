@@ -18,7 +18,13 @@
     "triggers": [
       {
         "type": "trigger-webhook",
-        "description": "Receives JSON payload via POST"
+        "description": "Receives JSON payload via POST with optional IP/Origin source whitelisting",
+        "config_fields": [
+          "apiKey",
+          "samplePayload",
+          "allowedIps",
+          "allowedOrigins"
+        ]
       }
     ],
     "actions": [
@@ -36,6 +42,36 @@
         "type": "action-http",
         "label": "Generic HTTP Request",
         "config_fields": ["method", "url", "headers", "body", "responseMapping"]
+      },
+      {
+        "type": "action-regex-replace",
+        "label": "Regex Replace",
+        "config_fields": ["inputText", "rules", "outputVariable"]
+      },
+      {
+        "type": "action-google-bridge",
+        "label": "Google Bridge",
+        "config_fields": ["webAppUrl", "action", "payload"]
+      },
+      {
+        "type": "action-url-decode",
+        "label": "URL Decode",
+        "config_fields": ["inputText", "outputVariable"]
+      },
+      {
+        "type": "action-ai",
+        "label": "AI Generation (LLM)",
+        "config_fields": [
+          "baseUrl",
+          "apiKey",
+          "model",
+          "systemPrompt",
+          "prompt",
+          "temperature",
+          "responseFormat",
+          "outputVariable",
+          "customHeaders"
+        ]
       }
     ],
     "logic": [
@@ -43,11 +79,25 @@
         "type": "condition",
         "label": "Logical Condition (AND/OR)",
         "config_fields": ["logicType", "conditions"]
+      },
+      {
+        "type": "condition-ai",
+        "label": "AI Condition (LLM)",
+        "config_fields": [
+          "baseUrl",
+          "apiKey",
+          "model",
+          "systemPrompt",
+          "inputText",
+          "criteria",
+          "reasoningVariable",
+          "customHeaders"
+        ]
       }
     ]
   },
   "variable_mapping_rules": {
     "extraction_utility": "resolvePath(obj, path)",
-    "merging_logic": "HTTP Node results are merged directly into currentContext.data if responseMapping is used."
+    "merging_logic": "HTTP responseMapping, Regex outputVariable, URL decode outputVariable, and AI output/reasoning variables are merged directly into currentContext.data."
   }
 }
