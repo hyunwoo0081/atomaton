@@ -278,6 +278,30 @@ describe('Webhook Controller - processWebhook', () => {
     })
     vi.useRealTimers()
   })
+
+  it('should return 500 immediately without retrying on non-retryable Prisma schema errors (P2022)', async () => {
+    mockReq = {
+      params: { accountId: 'acc-1', triggerId: 'trig-1' },
+      headers: { authorization: 'Bearer correct-api-key' },
+      body: { payload: 'hello' },
+    }
+
+    const schemaError = Object.assign(
+      new Error(
+        'The column `Trigger.nodeId` does not exist in the current database.'
+      ),
+      { code: 'P2022' }
+    )
+    vi.mocked(prisma.trigger.findUnique).mockRejectedValue(schemaError)
+
+    await processWebhook(mockReq as Request, mockRes as Response)
+
+    expect(prisma.trigger.findUnique).toHaveBeenCalledTimes(1)
+    expect(statusMock).toHaveBeenCalledWith(500)
+    expect(jsonMock).toHaveBeenCalledWith({
+      message: 'Internal server error',
+    })
+  })
 })
 
 describe('Webhook Controller - processWebhookByToken', () => {
@@ -458,6 +482,29 @@ describe('Webhook Controller - processWebhookByToken', () => {
       message: 'Internal server error',
     })
     vi.useRealTimers()
+  })
+
+  it('should return 500 immediately without retrying on non-retryable Prisma schema errors (P2022)', async () => {
+    mockReq = {
+      params: { webhookToken: 'wh_error' },
+      body: { data: 'test' },
+    }
+
+    const schemaError = Object.assign(
+      new Error(
+        'The column `Trigger.webhookToken` does not exist in the current database.'
+      ),
+      { code: 'P2022' }
+    )
+    vi.mocked(prisma.trigger.findUnique).mockRejectedValue(schemaError)
+
+    await processWebhookByToken(mockReq as Request, mockRes as Response)
+
+    expect(prisma.trigger.findUnique).toHaveBeenCalledTimes(1)
+    expect(statusMock).toHaveBeenCalledWith(500)
+    expect(jsonMock).toHaveBeenCalledWith({
+      message: 'Internal server error',
+    })
   })
 })
 

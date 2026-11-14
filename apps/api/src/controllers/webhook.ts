@@ -13,6 +13,39 @@ interface WebhookConfig extends WebhookSecurityConfig {
   apiKey?: string
 }
 
+const NON_RETRYABLE_PRISMA_CODES = new Set([
+  'P2021', // Table does not exist in current database
+  'P2022', // Column does not exist in current database
+  'P2009', // Failed to validate query
+  'P2012', // Missing a required value
+])
+
+const isNonRetryableDbError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false
+  const err = error as {
+    code?: unknown
+    name?: unknown
+    message?: unknown
+  }
+  if (
+    typeof err.code === 'string' &&
+    NON_RETRYABLE_PRISMA_CODES.has(err.code)
+  ) {
+    return true
+  }
+  if (err.name === 'PrismaClientValidationError') {
+    return true
+  }
+  if (
+    typeof err.message === 'string' &&
+    (err.message.includes('Unknown column') ||
+      err.message.includes('does not exist in the current database'))
+  ) {
+    return true
+  }
+  return false
+}
+
 const logBlockedWebhook = async (
   workflowId: string,
   triggerId: string,
@@ -47,7 +80,7 @@ const logBlockedWebhook = async (
       })
       break
     } catch (error) {
-      if (attempt < maxRetries - 1) continue
+      if (!isNonRetryableDbError(error) && attempt < maxRetries - 1) continue
       console.error('Failed to log blocked webhook event:', error)
     }
   }
@@ -84,7 +117,7 @@ export const processWebhook = async (req: Request, res: Response) => {
         })
         break
       } catch (error) {
-        if (attempt < maxRetries - 1) continue
+        if (!isNonRetryableDbError(error) && attempt < maxRetries - 1) continue
         throw error
       }
     }
@@ -153,7 +186,7 @@ export const processWebhook = async (req: Request, res: Response) => {
         })
         break
       } catch (error) {
-        if (attempt < maxRetries - 1) continue
+        if (!isNonRetryableDbError(error) && attempt < maxRetries - 1) continue
         throw error
       }
     }
@@ -191,7 +224,7 @@ export const processWebhookByToken = async (req: Request, res: Response) => {
         })
         break
       } catch (error) {
-        if (attempt < maxRetries - 1) continue
+        if (!isNonRetryableDbError(error) && attempt < maxRetries - 1) continue
         throw error
       }
     }
@@ -257,7 +290,8 @@ export const processWebhookByToken = async (req: Request, res: Response) => {
           })
           break
         } catch (error) {
-          if (attempt < maxRetries - 1) continue
+          if (!isNonRetryableDbError(error) && attempt < maxRetries - 1)
+            continue
           console.error('Failed to log webhook event:', error)
         }
       }

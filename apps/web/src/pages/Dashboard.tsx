@@ -44,6 +44,8 @@ export const Dashboard: React.FC = () => {
   const {
     data: workflows = [],
     isLoading: isLoadingWorkflows,
+    isError: isWorkflowsError,
+    error: workflowsError,
     refetch: refetchWorkflows,
   } = useQuery<WorkflowShort[]>({
     queryKey: ['workflows'],
@@ -374,7 +376,28 @@ export const Dashboard: React.FC = () => {
             )
           })}
 
-          {workflows.length === 0 && (
+          {isWorkflowsError && (
+            <div className="col-span-full text-center py-10 px-6 bg-[#FF2E63]/10 border border-[#FF2E63]/30 rounded-3xl space-y-3">
+              <p className="text-[#FF2E63] font-semibold">
+                Failed to load workflows
+              </p>
+              <p className="text-sm text-white/60">
+                {workflowsError instanceof Error
+                  ? workflowsError.message
+                  : 'An unexpected error occurred while fetching workflows.'}
+              </p>
+              <div>
+                <Button
+                  onClick={() => refetchWorkflows()}
+                  className="bg-white/10 hover:bg-white/20 text-white text-sm"
+                >
+                  Retry
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!isWorkflowsError && workflows.length === 0 && (
             <div className="col-span-full text-center py-12 text-white/50 border border-dashed border-white/10 rounded-3xl">
               No workflows found. Create your first one!
             </div>
