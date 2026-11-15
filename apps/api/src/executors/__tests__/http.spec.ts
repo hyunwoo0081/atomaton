@@ -14,7 +14,7 @@ import {
 import axios from 'axios'
 import prisma, { Workflow } from '@atomaton/db'
 import * as queue from '../queue'
-import { resolvePath, executeWorkflow } from '../executor'
+import { resolvePath, executeWorkflow, executeSingleNode } from '../executor'
 import { WorkflowContext, UIConfig, ActionConfig } from '../types'
 
 // Mock axios correctly
@@ -588,6 +588,185 @@ describe('HTTP Request Node & Path Resolution', () => {
 
       // enqueueSpy should NOT have been called because retryCount was already 3
       expect(enqueueSpy).not.toHaveBeenCalled()
+    })
+
+    it('should resume from failed node on retry without re-executing already completed nodes', async () => {
+      const workflow: UIConfig = {
+        nodes: [
+          {
+            id: 't1',
+            type: 'trigger-webhook',
+            data: { label: 'T', config: {} as unknown as ActionConfig },
+          },
+          {
+            id: 'd1',
+            type: 'action',
+            data: {
+              label: 'Discord Completed First',
+              config: {
+                webhookUrl: 'https://discord-first.com',
+                content: 'First notification',
+              } as unknown as ActionConfig,
+            },
+          },
+          {
+            id: 'h1',
+            type: 'action-http',
+            data: {
+              label: 'HTTP Flaky',
+              config: {
+                method: 'GET',
+                url: 'https://flaky-api.com',
+                outputVariable: 'flaky_res',
+                statusVariable: 'flaky_status',
+                responseMapping: [
+                  { sourcePath: 'token', targetVariable: 'api_token' },
+                ],
+              } as unknown as ActionConfig,
+            },
+          },
+          {
+            id: 'd2',
+            type: 'action',
+            data: {
+              label: 'Discord Final',
+              config: {
+                webhookUrl: 'https://discord-final.com',
+                content: 'Token={{api_token}}, Status={{flaky_status}}',
+              } as unknown as ActionConfig,
+            },
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 't1', target: 'd1' },
+          { id: 'e2', source: 'd1', target: 'h1' },
+          { id: 'e3', source: 'h1', target: 'd2' },
+        ],
+      }
+
+      vi.mocked(prisma.workflow.findUnique).mockResolvedValue({
+        id: 'wf-partial-retry',
+        is_active: true,
+        ui_config: workflow,
+      } as unknown as Workflow)
+
+      // Attempt 1: d1 succeeds, h1 fails all 5 internal attempts
+      mockedAxios.post.mockResolvedValueOnce({ status: 204, data: {} })
+      mockedAxios.mockRejectedValue({ response: { status: 500 } })
+
+      const firstPromise = executeWorkflow({
+        workflowId: 'wf-partial-retry',
+        triggerId: 'tr1',
+        executionId: 'ex-partial',
+        data: {},
+        results: {},
+      })
+      await vi.runAllTimersAsync()
+      await firstPromise
+
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1)
+      expect(enqueueSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          executionId: 'ex-partial',
+          retryCount: 1,
+          completedNodeIds: ['d1'],
+          failedNodeId: 'h1',
+        }),
+        10000
+      )
+
+      const scheduledRetryContext = enqueueSpy.mock
+        .calls[0][0] as WorkflowContext
+
+      // Retry attempt: h1 now succeeds and triggers d2; d1 MUST NOT run again
+      mockedAxios.mockReset()
+      mockedAxios.mockResolvedValueOnce({
+        status: 200,
+        data: { token: 'SECRET_OK' },
+      })
+      mockedAxios.post.mockResolvedValueOnce({ status: 204, data: {} })
+
+      const retryPromise = executeWorkflow(scheduledRetryContext)
+      await vi.runAllTimersAsync()
+      const retryLogs = await retryPromise
+
+      // Total post calls: d1 once in attempt 1, d2 once in retry (never d1 again)
+      expect(mockedAxios.post).toHaveBeenCalledTimes(2)
+      expect(mockedAxios.post).toHaveBeenLastCalledWith(
+        'https://discord-final.com',
+        { content: 'Token=SECRET_OK, Status=200' }
+      )
+      expect(retryLogs?.map((l) => l.actionId)).toEqual(['h1', 'd2'])
+    })
+  })
+
+  describe('HTTP Output Variables, JSON Auto-Parsing, and Single Block Fast-Fail Test', () => {
+    it('should parse stringified JSON response and extract custom outputVariable and statusVariable', async () => {
+      mockedAxios.mockResolvedValueOnce({
+        status: 201,
+        data: '{"user":{"name":"Kim","tier":"pro"}}',
+      })
+
+      const result = await executeSingleNode(
+        {
+          id: 'h-json',
+          type: 'action-http',
+          data: {
+            label: 'HTTP JSON',
+            config: {
+              method: 'GET',
+              url: 'https://api.example.com/user',
+              outputVariable: 'user_res',
+              statusVariable: 'user_status',
+              responseMapping: [
+                { sourcePath: 'user.tier', targetVariable: 'user_tier' },
+              ],
+            } as unknown as ActionConfig,
+          },
+        },
+        {
+          workflowId: 'wf1',
+          triggerId: 'test-node',
+          executionId: 'ex-single',
+          data: {},
+          results: {},
+        }
+      )
+
+      expect(result.success).toBe(true)
+      expect(result.extractedVariables).toEqual({
+        user_res: { user: { name: 'Kim', tier: 'pro' } },
+        user_status: 201,
+        user_tier: 'pro',
+      })
+    })
+
+    it('should fail immediately without backoff retries in executeSingleNode on 500 error', async () => {
+      mockedAxios.mockRejectedValueOnce({ response: { status: 500 } })
+
+      const result = await executeSingleNode(
+        {
+          id: 'h-fail',
+          type: 'action-http',
+          data: {
+            label: 'HTTP Fail',
+            config: {
+              method: 'GET',
+              url: 'https://api.example.com/fail',
+            } as unknown as ActionConfig,
+          },
+        },
+        {
+          workflowId: 'wf1',
+          triggerId: 'test-node',
+          executionId: 'ex-single-fail',
+          data: {},
+          results: {},
+        }
+      )
+
+      expect(result.success).toBe(false)
+      expect(mockedAxios).toHaveBeenCalledTimes(1)
     })
   })
 })

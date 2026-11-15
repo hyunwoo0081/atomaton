@@ -12,6 +12,7 @@ import type {
   Node,
   NodeChange,
   OnConnect,
+  OnConnectStart,
   OnEdgesChange,
   OnNodesChange,
   OnNodesDelete,
@@ -47,10 +48,13 @@ interface WorkflowState {
   modalPosition: XYPosition
   sourceNodeId: string | null
   sourceHandleId: string | null
+  connectingNodeId: string | null
+  connectingHandleId: string | null
 
   onNodesChange: OnNodesChange
   onEdgesChange: OnEdgesChange
   onConnect: OnConnect
+  onConnectStart: OnConnectStart
   onConnectEnd: OnConnectEnd
   onDrop: (event: React.DragEvent, reactFlowInstance: ReactFlowInstance) => void
   onNodesDelete: OnNodesDelete
@@ -88,6 +92,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   modalPosition: { x: 0, y: 0 },
   sourceNodeId: null,
   sourceHandleId: null,
+  connectingNodeId: null,
+  connectingHandleId: null,
 
   onNodesChange: (changes: NodeChange[]) => {
     set({ nodes: applyNodeChanges(changes, get().nodes), isDirty: true })
@@ -111,40 +117,59 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
     const newEdge: Edge = {
       ...connection,
-      id: `e-${connection.source}-${connection.target}`,
+      id: `e-${connection.source}-${connection.sourceHandle || 'default'}-${connection.target}`,
       type: 'smoothstep',
       label,
       style: { stroke, strokeWidth: 2 },
       markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
     } as Edge
-    set({ edges: addEdge(newEdge, get().edges), isDirty: true })
+    set({
+      edges: addEdge(newEdge, get().edges),
+      isDirty: true,
+      connectingNodeId: null,
+      connectingHandleId: null,
+    })
   },
 
-  onConnectEnd: (event: unknown, connectionState: OnConnectStartParams) => {
-    if (connectionState && connectionState.nodeId) {
-      let clientX = 0,
-        clientY = 0
-      if (event instanceof MouseEvent) {
-        clientX = event.clientX
-        clientY = event.clientY
-      } else if (event && typeof event === 'object' && 'touches' in event) {
-        // Use type guard to safely access touches
-        const te = event as TouchEvent
-        if (te.touches && te.touches.length > 0) {
-          clientX = te.touches[0].clientX
-          clientY = te.touches[0].clientY
-        }
-      }
+  onConnectStart: (_event, params: OnConnectStartParams) => {
+    set({
+      connectingNodeId: params.nodeId || null,
+      connectingHandleId: params.handleId || null,
+    })
+  },
 
-      const sourceNodeId = connectionState.nodeId
-      const sourceHandleId = connectionState.handleId || null
-      if (sourceNodeId)
-        get().openModal(
-          { x: clientX, y: clientY },
-          sourceNodeId,
-          sourceHandleId
-        )
+  onConnectEnd: (event: MouseEvent | TouchEvent) => {
+    const { connectingNodeId, connectingHandleId } = get()
+    set({ connectingNodeId: null, connectingHandleId: null })
+
+    const targetEl = event.target as Element | null
+    const droppedOnNodeOrHandle =
+      targetEl &&
+      typeof targetEl.closest === 'function' &&
+      (targetEl.closest('.react-flow__node') ||
+        targetEl.closest('.react-flow__handle'))
+    if (droppedOnNodeOrHandle || !connectingNodeId) {
+      return
     }
+
+    let clientX = 0
+    let clientY = 0
+    if ('clientX' in event) {
+      clientX = event.clientX
+      clientY = event.clientY
+    } else if ('touches' in event) {
+      const touch = event.touches?.[0] || event.changedTouches?.[0]
+      if (touch) {
+        clientX = touch.clientX
+        clientY = touch.clientY
+      }
+    }
+
+    get().openModal(
+      { x: clientX, y: clientY },
+      connectingNodeId,
+      connectingHandleId || undefined
+    )
   },
 
   onDrop: (event, reactFlowInstance) => {
@@ -296,13 +321,21 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     set({ isModalOpen: false, sourceNodeId: null, sourceHandleId: null }),
 
   addNode: (type, positionOverride) => {
-    const { nodes, sourceNodeId, sourceHandleId, onConnect } = get()
+    const { nodes, edges, sourceNodeId, sourceHandleId, onConnect } = get()
     const newNodeId = uuidv4()
     let position = positionOverride || { x: 250, y: 250 }
     if (!positionOverride && sourceNodeId) {
       const sourceNode = nodes.find((n) => n.id === sourceNodeId)
       if (sourceNode) {
-        position = { x: sourceNode.position.x, y: sourceNode.position.y + 150 }
+        const existingOutEdges = edges.filter(
+          (e) =>
+            e.source === sourceNodeId &&
+            (e.sourceHandle || null) === (sourceHandleId || null)
+        )
+        position = {
+          x: sourceNode.position.x + existingOutEdges.length * 220,
+          y: sourceNode.position.y + 150,
+        }
         if (sourceHandleId === 'true') position.x -= 100
         if (sourceHandleId === 'false') position.x += 100
       }

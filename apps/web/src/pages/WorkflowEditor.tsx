@@ -53,6 +53,7 @@ const WorkflowEditorContent: React.FC = () => {
     onNodesChange,
     onEdgesChange,
     onConnect,
+    onConnectStart,
     onConnectEnd,
     onDrop,
     onNodesDelete,
@@ -154,12 +155,34 @@ const WorkflowEditorContent: React.FC = () => {
 
   const isValidConnection = useCallback(
     (connection: Connection) => {
-      const sourceHasConnection = edges.some(
+      if (!connection.source || !connection.target) return false
+      if (connection.source === connection.target) return false
+
+      const isDuplicateEdge = edges.some(
         (edge) =>
           edge.source === connection.source &&
-          edge.sourceHandle === connection.sourceHandle
+          (edge.sourceHandle ?? null) === (connection.sourceHandle ?? null) &&
+          edge.target === connection.target &&
+          (edge.targetHandle ?? null) === (connection.targetHandle ?? null)
       )
-      return !sourceHasConnection
+      if (isDuplicateEdge) return false
+
+      // Prevent graph cycles: ensure connection.source is not reachable from connection.target
+      const visited = new Set<string>()
+      const queue: string[] = [connection.target]
+      while (queue.length > 0) {
+        const current = queue.shift()!
+        if (current === connection.source) return false
+        if (visited.has(current)) continue
+        visited.add(current)
+        for (const edge of edges) {
+          if (edge.source === current && !visited.has(edge.target)) {
+            queue.push(edge.target)
+          }
+        }
+      }
+
+      return true
     },
     [edges]
   )
@@ -440,9 +463,8 @@ const WorkflowEditorContent: React.FC = () => {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
-          onConnectEnd={(_event, connectionState) =>
-            onConnectEnd(_event, connectionState)
-          }
+          onConnectStart={onConnectStart}
+          onConnectEnd={onConnectEnd}
           onEdgeUpdate={onEdgeUpdate}
           onEdgeUpdateStart={onEdgeUpdateStart}
           onEdgeUpdateEnd={onEdgeUpdateEnd}
@@ -491,6 +513,7 @@ const WorkflowEditorContent: React.FC = () => {
           onSave={handleConfigSave}
           onClose={() => setSelectedNodeId(null)}
           userId={workflow?.userId}
+          workflowId={id}
           triggerId={
             workflow?.triggers?.find((t) => t.nodeId === selectedNode.id)?.id ||
             workflow?.trigger?.id

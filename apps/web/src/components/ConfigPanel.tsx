@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Button, Input } from '@atomaton/ui'
 import { api } from '../utils/api'
 import { useQuery } from '@tanstack/react-query'
+import type { Node, Edge } from 'reactflow'
 import { AccountConnectionModal } from './AccountConnectionModal'
 import { useWorkflowStore } from '../store/workflowStore'
-import { VariablePicker } from './VariablePicker'
+import { VariablePicker, extractJsonPaths } from './VariablePicker'
 import { getTriggerSamplePresets } from '../types/workflow'
 import type {
   NodeConfig,
@@ -14,12 +15,14 @@ import type {
   ConditionRule,
   AccountResponse,
   HttpActionConfig,
+  HttpResponseMapping,
   WebhookTriggerNodeConfig,
   RegexReplaceActionConfig,
   GoogleBridgeActionConfig,
   UrlDecodeActionConfig,
   AiGenerateActionConfig,
   AiConditionConfig,
+  SingleNodeTestResponse,
 } from '../types/workflow'
 
 interface ConfigPanelProps {
@@ -29,6 +32,7 @@ interface ConfigPanelProps {
   onSave: (config: NodeConfig) => void
   onClose: () => void
   userId?: string
+  workflowId?: string
   triggerId?: string
   onSaveWorkflow?: () => void
   triggerType?: string
@@ -83,9 +87,31 @@ const FilterRules: React.FC<{
   rules: ConditionRule[]
   onChange: (rules: ConditionRule[]) => void
   allowCustomField?: boolean
-}> = ({ rules = [], onChange, allowCustomField = false }) => {
+  nodeId?: string
+  nodes?: Node[]
+  edges?: Edge[]
+}> = ({
+  rules = [],
+  onChange,
+  allowCustomField = false,
+  nodeId,
+  nodes,
+  edges,
+}) => {
+  const [focusedInput, setFocusedInput] = useState<{
+    index: number
+    key: 'field' | 'value'
+  } | null>(null)
+
   const addRule = () => {
-    onChange([...rules, { field: 'subject', operator: 'contains', value: '' }])
+    onChange([
+      ...rules,
+      {
+        field: allowCustomField ? '' : 'subject',
+        operator: 'contains',
+        value: '',
+      },
+    ])
   }
 
   const updateRule = (index: number, key: keyof ConditionRule, val: string) => {
@@ -96,6 +122,38 @@ const FilterRules: React.FC<{
 
   const removeRule = (index: number) => {
     onChange(rules.filter((_, i) => i !== index))
+    if (focusedInput?.index === index) {
+      setFocusedInput(null)
+    }
+  }
+
+  const handleVariableInsert = (templateVar: string) => {
+    const bareVarName = templateVar.replace(/^\{\{\s*|\s*\}\}$/g, '')
+    if (rules.length === 0) {
+      onChange([{ field: bareVarName, operator: 'equals', value: '' }])
+      return
+    }
+    if (focusedInput && rules[focusedInput.index]) {
+      const { index, key } = focusedInput
+      const insertText = key === 'field' ? bareVarName : templateVar
+      const currentVal = rules[index][key] || ''
+      updateRule(
+        index,
+        key,
+        key === 'field' ? insertText : `${currentVal}${insertText}`
+      )
+      return
+    }
+    const lastIdx = rules.length - 1
+    if (!rules[lastIdx].field) {
+      updateRule(lastIdx, 'field', bareVarName)
+    } else {
+      updateRule(
+        lastIdx,
+        'value',
+        `${rules[lastIdx].value || ''}${templateVar}`
+      )
+    }
   }
 
   return (
@@ -110,8 +168,9 @@ const FilterRules: React.FC<{
               <input
                 className="w-1/3 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:ring-1 focus:ring-[#8A3FFC]"
                 value={rule.field}
+                onFocus={() => setFocusedInput({ index, key: 'field' })}
                 onChange={(e) => updateRule(index, 'field', e.target.value)}
-                placeholder="Field (e.g. data.from)"
+                placeholder="Field (e.g. http_status)"
               />
             ) : (
               <select
@@ -174,6 +233,7 @@ const FilterRules: React.FC<{
               <input
                 className="w-1/3 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:ring-1 focus:ring-[#8A3FFC]"
                 value={rule.value}
+                onFocus={() => setFocusedInput({ index, key: 'value' })}
                 onChange={(e) => updateRule(index, 'value', e.target.value)}
                 placeholder="Value"
               />
@@ -183,6 +243,7 @@ const FilterRules: React.FC<{
               </div>
             )}
             <button
+              type="button"
               onClick={() => removeRule(index)}
               className="text-[#FF2E63] hover:text-red-400 transition-colors text-xl font-bold"
             >
@@ -192,11 +253,20 @@ const FilterRules: React.FC<{
         ))}
       </div>
       <button
+        type="button"
         onClick={addRule}
         className="mt-3 text-xs text-[#8A3FFC] hover:text-[#E02DFF] hover:underline transition-colors"
       >
         + Add Condition
       </button>
+      {allowCustomField && nodeId && nodes && edges && (
+        <VariablePicker
+          currentNodeId={nodeId}
+          nodes={nodes}
+          edges={edges}
+          onSelect={handleVariableInsert}
+        />
+      )}
     </div>
   )
 }
@@ -273,6 +343,702 @@ const TriggerSamplePayloadField: React.FC<TriggerSamplePayloadFieldProps> = ({
   )
 }
 
+interface HeaderRow {
+  id: string
+  key: string
+  value: string
+}
+
+const buildInitialTestInput = (
+  currentNodeId: string,
+  nodes: Node[],
+  edges: Edge[]
+): Record<string, unknown> => {
+  const visited = new Set<string>()
+  const upstreamNodes: Node[] = []
+  const queue: string[] = []
+
+  for (const edge of edges) {
+    if (edge.target === currentNodeId) {
+      queue.push(edge.source)
+    }
+  }
+
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    if (visited.has(id)) continue
+    visited.add(id)
+    const found = nodes.find((n) => n.id === id)
+    if (found) {
+      upstreamNodes.push(found)
+      for (const edge of edges) {
+        if (edge.target === id && !visited.has(edge.source)) {
+          queue.push(edge.source)
+        }
+      }
+    }
+  }
+
+  const orderedUpstream = [...upstreamNodes].reverse()
+  const seed: Record<string, unknown> = {}
+
+  const applyTriggerSeed = (node: Node) => {
+    const cfg = node.data?.config as
+      | TriggerNodeConfig
+      | WebhookTriggerNodeConfig
+      | undefined
+    if (cfg?.samplePayload && cfg.samplePayload.trim()) {
+      try {
+        const parsed = JSON.parse(cfg.samplePayload) as unknown
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          Object.assign(seed, parsed as Record<string, unknown>)
+          return
+        }
+      } catch {
+        // Fallback below
+      }
+    }
+    if (node.type === 'trigger-webhook') {
+      Object.assign(seed, {
+        subject: 'Sample Webhook',
+        status: 'success',
+        amount: 25000,
+      })
+    } else {
+      Object.assign(seed, {
+        subject: 'Test Email Subject',
+        from: 'test@example.com',
+        body: 'This is a sample email body.',
+      })
+    }
+  }
+
+  const hasUpstreamTrigger = orderedUpstream.some((n) =>
+    n.type?.startsWith('trigger')
+  )
+  if (!hasUpstreamTrigger) {
+    const anyTrigger = nodes.find((n) => n.type?.startsWith('trigger'))
+    if (anyTrigger) applyTriggerSeed(anyTrigger)
+  }
+
+  for (const node of orderedUpstream) {
+    const type = node.type
+    const cfg = node.data?.config as NodeConfig | undefined
+    if (type === 'trigger' || type === 'trigger-webhook') {
+      applyTriggerSeed(node)
+    } else if (type === 'action-http') {
+      const httpCfg = cfg as HttpActionConfig | undefined
+      const outVar = httpCfg?.outputVariable?.trim() || 'http_response'
+      const statusVar = httpCfg?.statusVariable?.trim() || 'http_status'
+      seed[statusVar] = 200
+      if (httpCfg?.sampleResponse) {
+        try {
+          seed[outVar] = JSON.parse(httpCfg.sampleResponse)
+        } catch {
+          seed[outVar] = { ok: true }
+        }
+      } else {
+        seed[outVar] = { ok: true }
+      }
+      if (httpCfg?.responseMapping) {
+        for (const m of httpCfg.responseMapping) {
+          if (
+            m.targetVariable?.trim() &&
+            seed[m.targetVariable] === undefined
+          ) {
+            seed[m.targetVariable.trim()] = 'sample_value'
+          }
+        }
+      }
+    } else if (
+      type === 'action-regex-replace' ||
+      type === 'action-url-decode' ||
+      type === 'action-ai'
+    ) {
+      const outVar = (
+        cfg as
+          | RegexReplaceActionConfig
+          | UrlDecodeActionConfig
+          | AiGenerateActionConfig
+          | undefined
+      )?.outputVariable
+      if (outVar) seed[outVar] = 'sample_output'
+    } else if (type === 'condition-ai') {
+      const reasonVar = (cfg as AiConditionConfig | undefined)
+        ?.reasoningVariable
+      if (reasonVar) seed[reasonVar] = 'Sample AI reasoning'
+    }
+  }
+
+  return seed
+}
+
+const suggestVarNameFromPath = (path: string): string => {
+  const clean = path
+    .replace(/\[(\d+)\]/g, '_$1')
+    .replace(/[^a-zA-Z0-9_.]/g, '_')
+  const parts = clean.split('.').filter(Boolean)
+  const selected = parts.length > 2 ? parts.slice(-2) : parts
+  return (
+    selected
+      .join('_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase() || 'extracted_var'
+  )
+}
+
+interface HttpRequestConfigFieldsProps {
+  nodeId: string
+  httpConfig: HttpActionConfig
+  nodes: Node[]
+  edges: Edge[]
+  onChangeField: (
+    key: string,
+    value: string | number | boolean | object | ConditionRule[]
+  ) => void
+}
+
+const HttpRequestConfigFields: React.FC<HttpRequestConfigFieldsProps> = ({
+  nodeId,
+  httpConfig,
+  nodes,
+  edges,
+  onChangeField,
+}) => {
+  const [headerRows, setHeaderRows] = useState<HeaderRow[]>([])
+  const method = httpConfig.method || 'GET'
+  const mappings = httpConfig.responseMapping || []
+
+  useEffect(() => {
+    const entries = Object.entries(httpConfig.headers || {})
+    setHeaderRows(
+      entries.map(([key, value], idx) => ({
+        id: `${nodeId}-hdr-${idx}`,
+        key,
+        value,
+      }))
+    )
+    // Re-sync header rows only when switching nodes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeId])
+
+  const syncHeadersToConfig = (rows: HeaderRow[]) => {
+    const nextHeaders: Record<string, string> = {}
+    for (const row of rows) {
+      const trimmedKey = row.key.trim()
+      if (trimmedKey) {
+        nextHeaders[trimmedKey] = row.value
+      }
+    }
+    onChangeField('headers', nextHeaders)
+  }
+
+  const addHeaderRow = () => {
+    const next = [
+      ...headerRows,
+      { id: `${nodeId}-hdr-${Date.now()}`, key: '', value: '' },
+    ]
+    setHeaderRows(next)
+  }
+
+  const updateHeaderRow = (
+    idx: number,
+    field: 'key' | 'value',
+    val: string
+  ) => {
+    const next = headerRows.map((r, i) =>
+      i === idx ? { ...r, [field]: val } : r
+    )
+    setHeaderRows(next)
+    syncHeadersToConfig(next)
+  }
+
+  const removeHeaderRow = (idx: number) => {
+    const next = headerRows.filter((_, i) => i !== idx)
+    setHeaderRows(next)
+    syncHeadersToConfig(next)
+  }
+
+  const addMapping = () => {
+    onChangeField('responseMapping', [
+      ...mappings,
+      { sourcePath: '', targetVariable: '' },
+    ])
+  }
+
+  const updateMapping = (
+    idx: number,
+    field: keyof HttpResponseMapping,
+    val: string
+  ) => {
+    const next = mappings.map((m, i) =>
+      i === idx ? { ...m, [field]: val } : m
+    )
+    onChangeField('responseMapping', next)
+  }
+
+  const removeMapping = (idx: number) => {
+    onChangeField(
+      'responseMapping',
+      mappings.filter((_, i) => i !== idx)
+    )
+  }
+
+  let bodyJsonState: 'empty' | 'valid' | 'template' = 'empty'
+  if (httpConfig.body && httpConfig.body.trim()) {
+    try {
+      JSON.parse(httpConfig.body)
+      bodyJsonState = 'valid'
+    } catch {
+      bodyJsonState = 'template'
+    }
+  }
+
+  return (
+    <>
+      <h3 className="font-bold text-lg text-[#00F5A0] border-b border-white/10 pb-2">
+        HTTP Request
+      </h3>
+
+      <div className="flex flex-col mb-4">
+        <label className="mb-2 text-sm font-medium text-white/80">Method</label>
+        <select
+          className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#00F5A0]"
+          value={method}
+          onChange={(e) => onChangeField('method', e.target.value)}
+        >
+          {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => (
+            <option key={m} value={m} className="bg-[#0D0E12]">
+              {m}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <Input
+        label="URL"
+        value={httpConfig.url || ''}
+        onChange={(e) => onChangeField('url', e.target.value)}
+        placeholder="https://api.example.com/v1/resource?id={{trigger.id}}"
+      />
+      <VariablePicker
+        currentNodeId={nodeId}
+        nodes={nodes}
+        edges={edges}
+        onSelect={(v) => onChangeField('url', (httpConfig.url || '') + v)}
+      />
+
+      {/* Request Headers */}
+      <div className="flex flex-col mt-4 pt-4 border-t border-white/10">
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-sm font-medium text-white/80">
+            Request Headers
+          </label>
+          <button
+            type="button"
+            onClick={addHeaderRow}
+            className="text-xs text-[#00F5A0] hover:underline font-medium"
+          >
+            + Add Header
+          </button>
+        </div>
+        {headerRows.length === 0 ? (
+          <p className="text-[11px] text-white/40 italic">
+            설정된 헤더가 없습니다. (예: Authorization, Content-Type)
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {headerRows.map((row, idx) => (
+              <div key={row.id} className="flex gap-1.5 items-center">
+                <input
+                  className="w-2/5 px-2.5 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#00F5A0]"
+                  value={row.key}
+                  onChange={(e) => updateHeaderRow(idx, 'key', e.target.value)}
+                  placeholder="Header Key"
+                />
+                <input
+                  className="w-3/5 px-2.5 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#00F5A0]"
+                  value={row.value}
+                  onChange={(e) =>
+                    updateHeaderRow(idx, 'value', e.target.value)
+                  }
+                  placeholder="Value (or {{var}})"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeHeaderRow(idx)}
+                  className="text-[#FF2E63] hover:text-red-400 text-lg font-bold px-1"
+                  title="Remove header"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Request Body */}
+      {method !== 'GET' && (
+        <div className="flex flex-col mt-4 pt-4 border-t border-white/10">
+          <label className="mb-2 text-sm font-medium text-white/80">
+            Request Body (JSON / Text)
+          </label>
+          <textarea
+            className="px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-[#00F5A0] h-28 text-xs font-mono leading-normal"
+            value={httpConfig.body || ''}
+            onChange={(e) => onChangeField('body', e.target.value)}
+            placeholder={`{\n  "subject": "{{trigger.subject}}",\n  "amount": "{{trigger.amount}}"\n}`}
+          />
+          {bodyJsonState === 'valid' && (
+            <span className="mt-1 text-[10px] text-[#00F5A0]">
+              ✓ Valid JSON
+            </span>
+          )}
+          {bodyJsonState === 'template' && (
+            <span className="mt-1 text-[10px] text-white/50">
+              Template / Raw text body (변수가 문자열/JSON으로 치환됩니다)
+            </span>
+          )}
+          <VariablePicker
+            currentNodeId={nodeId}
+            nodes={nodes}
+            edges={edges}
+            onSelect={(v) => onChangeField('body', (httpConfig.body || '') + v)}
+          />
+        </div>
+      )}
+
+      {/* Output Variables */}
+      <div className="flex flex-col mt-4 pt-4 border-t border-white/10 space-y-3">
+        <label className="text-sm font-bold text-[#00F5A0]">
+          출력 변수 설정 (Output Variables)
+        </label>
+        <Input
+          label="Response Output Variable"
+          value={httpConfig.outputVariable || ''}
+          onChange={(e) => onChangeField('outputVariable', e.target.value)}
+          placeholder="http_response (전체 응답 JSON이 저장되는 변수명)"
+        />
+        <Input
+          label="Status Code Variable"
+          value={httpConfig.statusVariable || ''}
+          onChange={(e) => onChangeField('statusVariable', e.target.value)}
+          placeholder="http_status (HTTP 상태 코드 200, 201 등)"
+        />
+      </div>
+
+      {/* Response JSON Mapping */}
+      <div className="flex flex-col mt-4 pt-4 border-t border-white/10">
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-sm font-bold text-[#00F5A0]">
+            JSON 응답 필드 매핑 (Response Mapping)
+          </label>
+          <button
+            type="button"
+            onClick={addMapping}
+            className="text-xs text-[#00F5A0] hover:underline font-medium"
+          >
+            + Add Mapping
+          </button>
+        </div>
+        <p className="text-[11px] text-white/50 mb-3 leading-relaxed">
+          응답 JSON의 특정 경로를 꺼내어 후속 노드(Condition, Discord 등)에서
+          {' {{변수명}} '}으로 바로 사용할 수 있습니다.
+        </p>
+
+        {mappings.length === 0 ? (
+          <p className="text-[11px] text-white/40 italic">
+            매핑 규칙이 없습니다. 아래 테스트 실행 후 응답 필드를 클릭해
+            추가하거나 직접 입력하세요.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {mappings.map((m, idx) => (
+              <div
+                key={idx}
+                className="flex gap-1.5 items-center bg-white/[0.02] p-2 border border-white/10 rounded-xl"
+              >
+                <input
+                  className="w-1/2 px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#00F5A0]"
+                  value={m.sourcePath}
+                  onChange={(e) =>
+                    updateMapping(idx, 'sourcePath', e.target.value)
+                  }
+                  placeholder="Path (e.g. data.user.id)"
+                />
+                <span className="text-white/40 text-xs">→</span>
+                <input
+                  className="w-1/2 px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#00F5A0]"
+                  value={m.targetVariable}
+                  onChange={(e) =>
+                    updateMapping(idx, 'targetVariable', e.target.value)
+                  }
+                  placeholder="Variable (e.g. user_id)"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeMapping(idx)}
+                  className="text-[#FF2E63] hover:text-red-400 text-lg font-bold px-1"
+                  title="Remove mapping"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+interface SingleNodeTestSectionProps {
+  workflowId: string
+  nodeId: string
+  nodeType: string
+  config: NodeConfig
+  nodes: Node[]
+  edges: Edge[]
+  onAddHttpMapping?: (sourcePath: string, targetVariable: string) => void
+  onCaptureHttpSample?: (sampleResponseJson: string) => void
+}
+
+const SingleNodeTestSection: React.FC<SingleNodeTestSectionProps> = ({
+  workflowId,
+  nodeId,
+  nodeType,
+  config,
+  nodes,
+  edges,
+  onAddHttpMapping,
+  onCaptureHttpSample,
+}) => {
+  const [inputJson, setInputJson] = useState('{}')
+  const [showInputEditor, setShowInputEditor] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
+  const [testResult, setTestResult] = useState<SingleNodeTestResponse | null>(
+    null
+  )
+  const [requestError, setRequestError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const initial = buildInitialTestInput(nodeId, nodes, edges)
+    setInputJson(JSON.stringify(initial, null, 2))
+    setTestResult(null)
+    setRequestError(null)
+    // Reset test payload when switching selected node
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeId])
+
+  let inputJsonError: string | null = null
+  try {
+    JSON.parse(inputJson)
+  } catch (err: unknown) {
+    inputJsonError = err instanceof Error ? err.message : 'Invalid JSON'
+  }
+
+  const handleResetInput = () => {
+    const initial = buildInitialTestInput(nodeId, nodes, edges)
+    setInputJson(JSON.stringify(initial, null, 2))
+  }
+
+  const handleRunBlockTest = async () => {
+    if (inputJsonError) return
+    setIsTesting(true)
+    setRequestError(null)
+    setTestResult(null)
+
+    try {
+      const parsedInput = JSON.parse(inputJson) as Record<string, unknown>
+      const currentNode = nodes.find((n) => n.id === nodeId)
+      const res = await api.post<SingleNodeTestResponse>(
+        `/workflows/${workflowId}/test-node`,
+        {
+          node: {
+            id: nodeId,
+            type: nodeType,
+            data: {
+              label: currentNode?.data?.label || nodeType,
+              config,
+            },
+          },
+          inputData: parsedInput,
+        }
+      )
+      setTestResult(res)
+
+      if (
+        nodeType === 'action-http' &&
+        res.result?.success &&
+        onCaptureHttpSample
+      ) {
+        const httpCfg = config as HttpActionConfig
+        const outVar = httpCfg.outputVariable?.trim() || 'http_response'
+        const rawPayload =
+          res.result.extractedVariables?.[outVar] ?? res.result.data
+        if (rawPayload !== undefined) {
+          try {
+            onCaptureHttpSample(JSON.stringify(rawPayload, null, 2))
+          } catch {
+            // Ignore non-serializable payload
+          }
+        }
+      }
+    } catch (err: unknown) {
+      setRequestError(
+        err instanceof Error ? err.message : '블록 단독 실행에 실패했습니다.'
+      )
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
+  const httpResponsePaths: string[] = (() => {
+    if (
+      nodeType !== 'action-http' ||
+      !testResult?.result?.success ||
+      !onAddHttpMapping
+    ) {
+      return []
+    }
+    const httpCfg = config as HttpActionConfig
+    const outVar = httpCfg.outputVariable?.trim() || 'http_response'
+    const rawPayload =
+      testResult.result.extractedVariables?.[outVar] ?? testResult.result.data
+    if (rawPayload && typeof rawPayload === 'object') {
+      return extractJsonPaths(rawPayload).slice(0, 24)
+    }
+    return []
+  })()
+
+  return (
+    <div className="mt-6 pt-5 border-t border-white/10 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-[#8A3FFC] uppercase tracking-wider">
+          ⚡ 블록 단독 테스트 (Test Block)
+        </span>
+        <button
+          type="button"
+          onClick={() => setShowInputEditor((v) => !v)}
+          className="text-[11px] text-white/60 hover:text-white underline"
+        >
+          {showInputEditor ? '입력 변수 접기' : '입력 변수 편집'}
+        </button>
+      </div>
+
+      {showInputEditor && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-white/50">
+              테스트 입력 컨텍스트 (JSON)
+            </span>
+            <button
+              type="button"
+              onClick={handleResetInput}
+              className="text-[10px] text-[#8A3FFC] hover:text-[#E02DFF]"
+            >
+              ↻ 상위 샘플 불러오기
+            </button>
+          </div>
+          <textarea
+            className="w-full h-28 px-3 py-2 bg-[#0D0E12]/70 border border-white/10 rounded-xl text-white font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-[#8A3FFC]"
+            value={inputJson}
+            onChange={(e) => setInputJson(e.target.value)}
+          />
+          {inputJsonError && (
+            <p className="text-[10px] text-[#FF2E63]">✗ {inputJsonError}</p>
+          )}
+        </div>
+      )}
+
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={isTesting || !!inputJsonError}
+        onClick={handleRunBlockTest}
+        className="w-full text-xs bg-[#8A3FFC]/20 hover:bg-[#8A3FFC]/35 border border-[#8A3FFC]/40 text-white"
+      >
+        {isTesting ? '실행 중...' : '▶ 이 블록 실행해보기'}
+      </Button>
+
+      {requestError && (
+        <div className="p-3 bg-[#FF2E63]/10 border border-[#FF2E63]/30 rounded-xl text-xs text-[#FF2E63]">
+          {requestError}
+        </div>
+      )}
+
+      {testResult && (
+        <div className="p-3 bg-[#0D0E12]/80 border border-white/10 rounded-xl space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                testResult.status === 'SUCCESS'
+                  ? 'bg-[#00F5A0]/20 text-[#00F5A0]'
+                  : 'bg-[#FF2E63]/20 text-[#FF2E63]'
+              }`}
+            >
+              {testResult.status}
+            </span>
+            <span className="text-[11px] text-white/70 truncate max-w-[200px]">
+              {testResult.result?.message || testResult.message}
+            </span>
+          </div>
+
+          {testResult.result?.extractedVariables &&
+            Object.keys(testResult.result.extractedVariables).length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-white/50 uppercase mb-1">
+                  Extracted Variables
+                </p>
+                <pre className="p-2 bg-black/40 rounded-lg text-[10px] text-[#00F5A0] font-mono overflow-x-auto max-h-28 overflow-y-auto">
+                  {JSON.stringify(
+                    testResult.result.extractedVariables,
+                    null,
+                    2
+                  )}
+                </pre>
+              </div>
+            )}
+
+          {testResult.result?.data && (
+            <div>
+              <p className="text-[10px] font-bold text-white/50 uppercase mb-1">
+                Output Data
+              </p>
+              <pre className="p-2 bg-black/40 rounded-lg text-[10px] text-white/80 font-mono overflow-x-auto max-h-36 overflow-y-auto">
+                {JSON.stringify(testResult.result.data, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {httpResponsePaths.length > 0 && onAddHttpMapping && (
+            <div className="pt-2 border-t border-white/10">
+              <p className="text-[10px] font-bold text-[#00F5A0] mb-1.5">
+                클릭하여 JSON 경로 매핑 추가:
+              </p>
+              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                {httpResponsePaths.map((path) => (
+                  <button
+                    key={path}
+                    type="button"
+                    onClick={() =>
+                      onAddHttpMapping(path, suggestVarNameFromPath(path))
+                    }
+                    className="px-2 py-0.5 bg-white/5 hover:bg-[#00F5A0]/20 border border-white/10 hover:border-[#00F5A0]/50 rounded-md text-[10px] text-white/80 hover:text-white font-mono transition-all"
+                  >
+                    + {path}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export const ConfigPanel: React.FC<ConfigPanelProps> = ({
   nodeId,
   nodeType,
@@ -280,14 +1046,16 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
   onSave,
   onClose,
   userId,
+  workflowId,
   triggerId,
   onSaveWorkflow,
-  triggerType,
-  triggerConfig,
+  triggerType: _triggerType,
+  triggerConfig: _triggerConfig,
 }) => {
   const [config, setConfig] = useState<NodeConfig>(
     initialConfig || ({} as NodeConfig)
   )
+  const configRef = useRef<NodeConfig>(initialConfig || ({} as NodeConfig))
   const { nodes, edges } = useWorkflowStore()
   const [selectedSampleType, setSelectedSampleType] = useState<
     'curl' | 'node' | 'java' | 'gas_simple' | 'gas_gmail'
@@ -311,10 +1079,11 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
 
   useEffect(() => {
     // Only update if the config or node really changed
-    if (JSON.stringify(initialConfig) !== JSON.stringify(config)) {
-      setConfig(initialConfig || ({} as NodeConfig))
+    if (JSON.stringify(initialConfig) !== JSON.stringify(configRef.current)) {
+      const next = initialConfig || ({} as NodeConfig)
+      configRef.current = next
+      setConfig(next)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId, initialConfig])
 
   useEffect(() => {
@@ -329,15 +1098,18 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
     }
   }, [onClose])
 
+  const handlePatchConfig = (partial: Record<string, unknown>) => {
+    const next = { ...configRef.current, ...partial } as NodeConfig
+    configRef.current = next
+    setConfig(next)
+    onSave(next)
+  }
+
   const handleChange = (
     key: string,
     value: string | number | boolean | object | ConditionRule[]
   ) => {
-    setConfig((prev: NodeConfig) => {
-      const next = { ...prev, [key]: value }
-      onSave(next)
-      return next
-    })
+    handlePatchConfig({ [key]: value })
   }
 
   return (
@@ -992,49 +1764,21 @@ public class WebhookSender {
               rules={(config as ConditionNodeConfig).conditions || []}
               onChange={(rules) => handleChange('conditions', rules)}
               allowCustomField={true}
+              nodeId={nodeId}
+              nodes={nodes}
+              edges={edges}
             />
           </>
         )}
 
         {nodeType === 'action-http' && (
-          <>
-            <h3 className="font-bold text-lg text-[#00F5A0] border-b border-white/10 pb-2">
-              HTTP Request
-            </h3>
-            <div className="flex flex-col mb-4">
-              <label className="mb-2 text-sm font-medium text-white/80">
-                Method
-              </label>
-              <select
-                className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[#00F5A0]"
-                value={(config as HttpActionConfig).method || 'GET'}
-                onChange={(e) => handleChange('method', e.target.value)}
-              >
-                {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => (
-                  <option key={m} value={m} className="bg-[#0D0E12]">
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Input
-              label="URL"
-              value={(config as HttpActionConfig).url || ''}
-              onChange={(e) => handleChange('url', e.target.value)}
-              placeholder="https://api.example.com/..."
-            />
-            <VariablePicker
-              currentNodeId={nodeId}
-              nodes={nodes}
-              edges={edges}
-              onSelect={(v) =>
-                handleChange(
-                  'url',
-                  ((config as HttpActionConfig).url || '') + v
-                )
-              }
-            />
-          </>
+          <HttpRequestConfigFields
+            nodeId={nodeId}
+            httpConfig={config as HttpActionConfig}
+            nodes={nodes}
+            edges={edges}
+            onChangeField={handleChange}
+          />
         )}
 
         {nodeType === 'action-regex-replace' &&
@@ -1689,6 +2433,40 @@ public class WebhookSender {
               </>
             )
           })()}
+
+        {!nodeType.startsWith('trigger') && workflowId && (
+          <SingleNodeTestSection
+            workflowId={workflowId}
+            nodeId={nodeId}
+            nodeType={nodeType}
+            config={config}
+            nodes={nodes}
+            edges={edges}
+            onAddHttpMapping={
+              nodeType === 'action-http'
+                ? (sourcePath, targetVariable) => {
+                    const currHttp = configRef.current as HttpActionConfig
+                    const existing = currHttp.responseMapping || []
+                    const alreadyMapped = existing.some(
+                      (m) => m.sourcePath === sourcePath
+                    )
+                    if (!alreadyMapped) {
+                      handleChange('responseMapping', [
+                        ...existing,
+                        { sourcePath, targetVariable },
+                      ])
+                    }
+                  }
+                : undefined
+            }
+            onCaptureHttpSample={
+              nodeType === 'action-http'
+                ? (sampleResponseJson) =>
+                    handleChange('sampleResponse', sampleResponseJson)
+                : undefined
+            }
+          />
+        )}
       </div>
 
       <div className="pt-6 border-t border-white/10 flex justify-end mt-auto">

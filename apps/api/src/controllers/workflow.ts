@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import prisma, { Prisma } from '@atomaton/db'
-import { executeWorkflow } from '../executors/executor'
+import { executeWorkflow, executeSingleNode } from '../executors/executor'
 import { v4 as uuidv4 } from 'uuid'
 import { GlobalSettings, WorkflowNode, WorkflowEdge } from '../executors/types'
 
@@ -572,5 +572,41 @@ export const testWorkflow = async (req: Request, res: Response) => {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error'
     res.status(500).json({ status: 'FAILURE', message: errorMessage, logs: [] })
+  }
+}
+
+export const testWorkflowNode = async (req: Request, res: Response) => {
+  const { id } = req.params
+  const { node, inputData } = req.body as {
+    node?: WorkflowNode
+    inputData?: Record<string, unknown>
+  }
+  const userId = req.userId
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' })
+  if (!node || !node.type) {
+    return res
+      .status(400)
+      .json({ status: 'FAILURE', message: 'Target node payload is required' })
+  }
+
+  try {
+    const result = await executeSingleNode(node, {
+      workflowId: id,
+      triggerId: 'test-node',
+      executionId: uuidv4(),
+      data: inputData || {},
+      results: {},
+      isTestRun: true,
+    })
+
+    res.status(200).json({
+      status: result.success ? 'SUCCESS' : 'FAILURE',
+      message: result.message,
+      result,
+    })
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error'
+    res.status(500).json({ status: 'FAILURE', message: errorMessage })
   }
 }

@@ -154,16 +154,36 @@ function getVariablesForNode(node: Node): {
 
   if (type === 'action-http') {
     const httpConfig = config as HttpActionConfig
+    const outVar = httpConfig?.outputVariable?.trim() || 'http_response'
+    const statusVar = httpConfig?.statusVariable?.trim() || 'http_status'
+    const vars: string[] = [outVar, statusVar]
+
     const mapping = httpConfig?.responseMapping
-    if (mapping && mapping.length > 0) {
-      return {
-        label: `HTTP Request (${label})`,
-        variables: mapping.map((m) => m.targetVariable),
+    if (mapping && Array.isArray(mapping)) {
+      for (const m of mapping) {
+        const target = m.targetVariable?.trim()
+        if (target) {
+          vars.push(target)
+        }
       }
     }
+
+    const sampleResStr = httpConfig?.sampleResponse
+    if (sampleResStr && sampleResStr.trim()) {
+      try {
+        const parsed = JSON.parse(sampleResStr)
+        const paths = extractJsonPaths(parsed)
+        for (const p of paths) {
+          vars.push(p.startsWith('[') ? `${outVar}${p}` : `${outVar}.${p}`)
+        }
+      } catch {
+        // Ignore invalid JSON sampleResponse
+      }
+    }
+
     return {
       label: `HTTP Request (${label})`,
-      variables: ['http_response'],
+      variables: Array.from(new Set(vars)),
     }
   }
 

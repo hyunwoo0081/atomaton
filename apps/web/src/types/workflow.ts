@@ -161,7 +161,10 @@ export interface HttpActionConfig extends BaseNodeConfig {
   url?: string
   headers?: Record<string, string>
   body?: string
+  outputVariable?: string
+  statusVariable?: string
   responseMapping?: HttpResponseMapping[]
+  sampleResponse?: string
 }
 
 export interface RegexReplaceRule {
@@ -259,6 +262,17 @@ export interface TestResult {
   status?: string
   logs?: LogEntry[]
   error?: string
+}
+
+export interface SingleNodeTestResponse {
+  status: 'SUCCESS' | 'FAILURE'
+  message?: string
+  result?: {
+    success: boolean
+    message: string
+    data?: Record<string, unknown>
+    extractedVariables?: Record<string, unknown>
+  }
 }
 
 // --- Account Interfaces ---

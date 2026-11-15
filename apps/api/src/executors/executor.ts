@@ -2,6 +2,7 @@
 import {
   WorkflowContext,
   WorkflowNode,
+  WorkflowEdge,
   UIConfig,
   HttpActionConfig,
   DiscordActionConfig,
@@ -183,7 +184,15 @@ export const executeHttpRequestAction = async (
   context: WorkflowContext
 ): Promise<ActionResult> => {
   const config = node.data.config as HttpActionConfig
-  const { method, url, headers, body, responseMapping } = config
+  const {
+    method,
+    url,
+    headers,
+    body,
+    outputVariable,
+    statusVariable,
+    responseMapping,
+  } = config
   if (!url || !method)
     return { success: false, message: 'HTTP URL or Method missing' }
 
@@ -210,7 +219,7 @@ export const executeHttpRequestAction = async (
     }
   }
 
-  const maxRetries = 5
+  const maxRetries = context.isTestRun ? 1 : 5
   const retryDelays = [1000, 5000, 30000, 120000, 600000]
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -229,22 +238,60 @@ export const executeHttpRequestAction = async (
       })
 
       if (response.status >= 200 && response.status < 300) {
-        const extractedVariables: WorkflowData = {}
-        if (responseMapping && Array.isArray(responseMapping)) {
-          for (const mapping of responseMapping) {
-            const value = resolvePath(
-              response.data as Record<string, unknown>,
-              mapping.sourcePath
-            )
-            if (value !== undefined) {
-              extractedVariables[mapping.targetVariable] = value
+        let parsedData: unknown = response.data
+        if (typeof response.data === 'string') {
+          const trimmed = response.data.trim()
+          if (
+            (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+            (trimmed.startsWith('[') && trimmed.endsWith(']'))
+          ) {
+            try {
+              parsedData = JSON.parse(trimmed)
+            } catch {
+              parsedData = response.data
             }
           }
         }
+
+        const extractedVariables: WorkflowData = {}
+        const outVarName = outputVariable?.trim() || 'http_response'
+        const statusVarName = statusVariable?.trim() || 'http_status'
+        extractedVariables[outVarName] = parsedData
+        extractedVariables[statusVarName] = response.status
+
+        if (responseMapping && Array.isArray(responseMapping)) {
+          for (const mapping of responseMapping) {
+            const targetVar = mapping.targetVariable?.trim()
+            if (!targetVar) continue
+            const cleanSourcePath = (mapping.sourcePath || '')
+              .trim()
+              .replace(/^\$\.?/, '')
+            const value =
+              cleanSourcePath === ''
+                ? parsedData
+                : typeof parsedData === 'object' && parsedData !== null
+                  ? resolvePath(
+                      parsedData as Record<string, unknown> | unknown[],
+                      cleanSourcePath
+                    )
+                  : undefined
+            if (value !== undefined) {
+              extractedVariables[targetVar] = value
+            }
+          }
+        }
+
+        const resultData: Record<string, unknown> =
+          typeof parsedData === 'object' &&
+          parsedData !== null &&
+          !Array.isArray(parsedData)
+            ? (parsedData as Record<string, unknown>)
+            : { response: parsedData, status: response.status }
+
         return {
           success: true,
           message: `HTTP ${method} successful`,
-          data: response.data as Record<string, unknown>,
+          data: resultData,
           extractedVariables,
         }
       } else {
@@ -280,11 +327,13 @@ export const executeDiscordAction = async (
   const chunks = splitDiscordMessage(templatedContent, 2000)
   const results: Record<string, unknown>[] = []
 
+  const maxRetries = context.isTestRun ? 1 : 5
+
   for (const chunk of chunks) {
     let success = false
     let attemptError: unknown = null
 
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0)
           await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -301,7 +350,7 @@ export const executeDiscordAction = async (
         if (
           ((status && (status >= 500 || status === 429)) ||
             !axiosError.response) &&
-          attempt < 4
+          attempt < maxRetries - 1
         )
           continue
         break
@@ -369,7 +418,7 @@ export const executeNotionAction = async (
       getTemplateData(context)
     )
 
-    const maxRetries = 5
+    const maxRetries = context.isTestRun ? 1 : 5
     const retryDelays = [1000, 5000, 30000, 120000, 600000]
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -436,15 +485,19 @@ export const executeCondition = async (
   let result = logicType === 'AND'
   for (const condition of conditions) {
     const { field, operator, value } = condition
+    const normalizedField = field
+      .trim()
+      .replace(/^\{\{\s*/, '')
+      .replace(/\s*\}\}$/, '')
     let dataValue = resolvePath(
       context as unknown as Record<string, unknown>,
-      field
+      normalizedField
     )
     if (dataValue === undefined) {
-      dataValue = resolvePath(context.data, field)
+      dataValue = resolvePath(context.data, normalizedField)
     }
     if (dataValue === undefined) {
-      dataValue = resolvePath(templateData, field)
+      dataValue = resolvePath(templateData, normalizedField)
     }
 
     const resolvedValue = value ? applyTemplate(value, templateData) : ''
@@ -627,7 +680,7 @@ export const executeGoogleBridgeAction = async (
     payload: templatedPayload,
   }
 
-  const maxRetries = 5
+  const maxRetries = context.isTestRun ? 1 : 5
   const retryDelays = [1000, 5000, 30000, 120000, 600000]
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -787,7 +840,7 @@ export const executeAiGenerateAction = async (
     requestBody.response_format = { type: 'json_object' }
   }
 
-  const maxRetries = 5
+  const maxRetries = context.isTestRun ? 1 : 5
   const retryDelays = [1000, 5000, 30000, 120000, 600000]
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -923,7 +976,7 @@ export const executeAiCondition = async (
     response_format: { type: 'json_object' },
   }
 
-  const maxRetries = 5
+  const maxRetries = context.isTestRun ? 1 : 5
   const retryDelays = [1000, 5000, 30000, 120000, 600000]
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -1011,11 +1064,98 @@ export const executeAiCondition = async (
   }
 }
 
+/**
+ * Dispatches execution of a single workflow node to its corresponding executor handler.
+ */
+const dispatchNodeExecution = async (
+  node: WorkflowNode,
+  context: WorkflowContext
+): Promise<ActionResult | null> => {
+  switch (node.type) {
+    case 'action':
+      return executeDiscordAction(node, context)
+    case 'action-notion':
+      return executeNotionAction(node, context)
+    case 'action-http':
+      return executeHttpRequestAction(node, context)
+    case 'action-regex-replace':
+      return executeRegexReplaceAction(node, context)
+    case 'action-google-bridge':
+      return executeGoogleBridgeAction(node, context)
+    case 'action-url-decode':
+      return executeUrlDecodeAction(node, context)
+    case 'action-ai':
+      return executeAiGenerateAction(node, context)
+    case 'condition':
+      return executeCondition(node, context)
+    case 'condition-ai':
+      return executeAiCondition(node, context)
+    default:
+      return null
+  }
+}
+
+/**
+ * Collects nodes and edges reachable from a given starting node ID.
+ */
+const getReachableSubgraph = (
+  startId: string,
+  edges: WorkflowEdge[]
+): { reachableNodes: Set<string>; reachableEdges: WorkflowEdge[] } => {
+  const reachableNodes = new Set<string>([startId])
+  const reachableEdges: WorkflowEdge[] = []
+  const bfsQueue = [startId]
+
+  while (bfsQueue.length > 0) {
+    const curr = bfsQueue.shift()!
+    for (const edge of edges) {
+      if (edge.source === curr && edge.target !== startId) {
+        reachableEdges.push(edge)
+        if (!reachableNodes.has(edge.target)) {
+          reachableNodes.add(edge.target)
+          bfsQueue.push(edge.target)
+        }
+      }
+    }
+  }
+
+  return { reachableNodes, reachableEdges }
+}
+
+/**
+ * Executes a single workflow node in isolated fast-fail test mode without persisting workflow logs.
+ */
+export const executeSingleNode = async (
+  node: WorkflowNode,
+  context: WorkflowContext
+): Promise<ActionResult> => {
+  const testContext: WorkflowContext = {
+    ...context,
+    isTestRun: true,
+  }
+  const result = await dispatchNodeExecution(node, testContext)
+  if (!result) {
+    return {
+      success: false,
+      message: `Unsupported node type for single block test: ${node.type}`,
+    }
+  }
+  return result
+}
+
 export const executeWorkflow = async (
   context: WorkflowContext,
   overrideWorkflowData?: UIConfig
 ): Promise<LogEntry[] | undefined> => {
   const { workflowId, triggerId, executionId, data } = context
+  const completedSet = new Set<string>(context.completedNodeIds || [])
+  let lastFailedNodeId: string | undefined = undefined
+  const currentContext: WorkflowContext = {
+    ...context,
+    data: { ...context.data },
+    results: { ...context.results },
+  }
+
   try {
     let uiConfig: UIConfig
     if (overrideWorkflowData) {
@@ -1034,13 +1174,86 @@ export const executeWorkflow = async (
       : nodes.find((n) => n.type.startsWith('trigger'))
     if (!triggerNode) throw new Error('No trigger node found')
 
-    const currentContext: WorkflowContext = { ...context }
+    const { reachableNodes, reachableEdges } = getReachableSubgraph(
+      triggerNode.id,
+      edges
+    )
+
+    const pendingIncomingCount = new Map<string, number>()
+    for (const nId of reachableNodes) {
+      pendingIncomingCount.set(nId, 0)
+    }
+    for (const edge of reachableEdges) {
+      pendingIncomingCount.set(
+        edge.target,
+        (pendingIncomingCount.get(edge.target) ?? 0) + 1
+      )
+    }
+
     const executionQueue: string[] = []
-    edges
-      .filter((e) => e.source === triggerNode.id)
-      .forEach((e) => executionQueue.push(e.target))
     const visited = new Set<string>([triggerNode.id])
+    const queued = new Set<string>([triggerNode.id])
+    const hasActiveParent = new Set<string>()
     const executionLogs: LogEntry[] = []
+
+    const enqueueIfReady = (nodeId: string) => {
+      if (!visited.has(nodeId) && !queued.has(nodeId)) {
+        queued.add(nodeId)
+        executionQueue.push(nodeId)
+      }
+    }
+
+    const activateEdge = (edge: WorkflowEdge) => {
+      const targetId = edge.target
+      hasActiveParent.add(targetId)
+      const remaining = (pendingIncomingCount.get(targetId) ?? 1) - 1
+      pendingIncomingCount.set(targetId, remaining)
+      if (remaining <= 0) {
+        enqueueIfReady(targetId)
+      }
+    }
+
+    const skipEdge = (edge: WorkflowEdge) => {
+      const targetId = edge.target
+      const remaining = (pendingIncomingCount.get(targetId) ?? 1) - 1
+      pendingIncomingCount.set(targetId, remaining)
+      if (remaining <= 0 && !visited.has(targetId) && !queued.has(targetId)) {
+        if (hasActiveParent.has(targetId)) {
+          enqueueIfReady(targetId)
+        } else {
+          visited.add(targetId)
+          for (const outEdge of reachableEdges) {
+            if (outEdge.source === targetId) {
+              skipEdge(outEdge)
+            }
+          }
+        }
+      }
+    }
+
+    const propagateOutgoing = (
+      node: WorkflowNode,
+      nextHandle: 'true' | 'false' | null
+    ) => {
+      const outgoingEdges = reachableEdges.filter((e) => e.source === node.id)
+      if (node.type === 'condition' || node.type === 'condition-ai') {
+        for (const edge of outgoingEdges) {
+          if (edge.sourceHandle === nextHandle) {
+            activateEdge(edge)
+          } else {
+            skipEdge(edge)
+          }
+        }
+      } else {
+        for (const edge of outgoingEdges) {
+          activateEdge(edge)
+        }
+      }
+    }
+
+    reachableEdges
+      .filter((e) => e.source === triggerNode.id)
+      .forEach(activateEdge)
 
     while (executionQueue.length > 0) {
       const nodeId = executionQueue.shift()!
@@ -1049,86 +1262,32 @@ export const executeWorkflow = async (
       const node = nodes.find((n) => n.id === nodeId)
       if (!node) continue
 
-      let actionResult: ActionResult = { success: true, message: 'Skipped' }
-      let nextHandle: 'true' | 'false' | null = null
+      // Skip nodes that already succeeded in an earlier attempt during retry
+      if (completedSet.has(nodeId)) {
+        let prevHandle: 'true' | 'false' | null = null
+        if (node.type === 'condition' || node.type === 'condition-ai') {
+          const prevResult = currentContext.results[nodeId]
+          prevHandle = prevResult?.data?.result ? 'true' : 'false'
+        }
+        propagateOutgoing(node, prevHandle)
+        continue
+      }
 
-      switch (node.type) {
-        case 'action': {
-          actionResult = await executeDiscordAction(node, currentContext)
-          break
+      const actionResult: ActionResult = (await dispatchNodeExecution(
+        node,
+        currentContext
+      )) ?? { success: true, message: 'Skipped' }
+
+      if (actionResult.success && actionResult.extractedVariables) {
+        currentContext.data = {
+          ...currentContext.data,
+          ...actionResult.extractedVariables,
         }
-        case 'action-notion': {
-          actionResult = await executeNotionAction(node, currentContext)
-          break
-        }
-        case 'action-http': {
-          actionResult = await executeHttpRequestAction(node, currentContext)
-          if (actionResult.success && actionResult.extractedVariables) {
-            currentContext.data = {
-              ...currentContext.data,
-              ...actionResult.extractedVariables,
-            }
-          }
-          break
-        }
-        case 'action-regex-replace': {
-          actionResult = await executeRegexReplaceAction(node, currentContext)
-          if (actionResult.success && actionResult.extractedVariables) {
-            currentContext.data = {
-              ...currentContext.data,
-              ...actionResult.extractedVariables,
-            }
-          }
-          break
-        }
-        case 'action-google-bridge': {
-          actionResult = await executeGoogleBridgeAction(node, currentContext)
-          break
-        }
-        case 'action-url-decode': {
-          actionResult = await executeUrlDecodeAction(node, currentContext)
-          if (actionResult.success && actionResult.extractedVariables) {
-            currentContext.data = {
-              ...currentContext.data,
-              ...actionResult.extractedVariables,
-            }
-          }
-          break
-        }
-        case 'action-ai': {
-          actionResult = await executeAiGenerateAction(node, currentContext)
-          if (actionResult.success && actionResult.extractedVariables) {
-            currentContext.data = {
-              ...currentContext.data,
-              ...actionResult.extractedVariables,
-            }
-          }
-          break
-        }
-        case 'condition': {
-          const conditionResult = await executeCondition(node, currentContext)
-          actionResult = conditionResult
-          nextHandle = conditionResult.data?.result ? 'true' : 'false'
-          break
-        }
-        case 'condition-ai': {
-          const aiConditionResult = await executeAiCondition(
-            node,
-            currentContext
-          )
-          actionResult = aiConditionResult
-          nextHandle = aiConditionResult.data?.result ? 'true' : 'false'
-          if (
-            aiConditionResult.success &&
-            aiConditionResult.extractedVariables
-          ) {
-            currentContext.data = {
-              ...currentContext.data,
-              ...aiConditionResult.extractedVariables,
-            }
-          }
-          break
-        }
+      }
+
+      let nextHandle: 'true' | 'false' | null = null
+      if (node.type === 'condition' || node.type === 'condition-ai') {
+        nextHandle = actionResult.data?.result ? 'true' : 'false'
       }
 
       const logEntry: LogEntry = {
@@ -1146,19 +1305,15 @@ export const executeWorkflow = async (
       })
       executionLogs.push(logEntry)
 
-      if (!actionResult.success)
+      if (!actionResult.success) {
+        lastFailedNodeId = nodeId
         throw new Error(`Node ${nodeId} failed: ${actionResult.message}`)
+      }
+
+      completedSet.add(nodeId)
       if (actionResult.data) currentContext.results[nodeId] = actionResult
 
-      const outgoingEdges = edges.filter((e) => e.source === nodeId)
-      if (node.type === 'condition' || node.type === 'condition-ai') {
-        const targetEdge = outgoingEdges.find(
-          (e) => e.sourceHandle === nextHandle
-        )
-        if (targetEdge) executionQueue.push(targetEdge.target)
-      } else {
-        outgoingEdges.forEach((e) => executionQueue.push(e.target))
-      }
+      propagateOutgoing(node, nextHandle)
     }
     return executionLogs
   } catch (error: unknown) {
@@ -1216,8 +1371,12 @@ export const executeWorkflow = async (
           data: retryLog as unknown as Prisma.LogCreateInput,
         })
 
-        const retryContext = {
+        const retryContext: WorkflowContext = {
           ...context,
+          data: currentContext.data,
+          results: currentContext.results,
+          completedNodeIds: Array.from(completedSet),
+          failedNodeId: lastFailedNodeId,
           retryCount: nextRetry,
         }
         enqueueWithDelay(retryContext, delay)

@@ -1,6 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { updateWorkflow, deleteWorkflow, duplicateWorkflow } from '../workflow'
+import {
+  updateWorkflow,
+  deleteWorkflow,
+  duplicateWorkflow,
+  testWorkflowNode,
+} from '../workflow'
+import { executeSingleNode } from '../../executors/executor'
 import { Request, Response } from 'express'
+
+vi.mock('../../executors/executor', () => ({
+  executeWorkflow: vi.fn(),
+  executeSingleNode: vi.fn(),
+}))
 
 // Mock @atomaton/db
 vi.mock('@atomaton/db', () => {
@@ -352,5 +363,79 @@ describe('Workflow Controller - duplicateWorkflow', () => {
     await duplicateWorkflow(mockReq as Request, mockRes as Response)
     expect(statusMock).toHaveBeenCalledWith(201)
     expect(jsonMock).toHaveBeenCalledWith(mockCopiedWorkflow)
+  })
+})
+
+describe('Workflow Controller - testWorkflowNode', () => {
+  let mockReq: Partial<Request>
+  let mockRes: Partial<Response>
+  let statusMock: ReturnType<typeof vi.fn>
+  let jsonMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    jsonMock = vi.fn()
+    statusMock = vi.fn().mockImplementation(() => ({
+      json: jsonMock,
+    }))
+    mockRes = {
+      status: statusMock as unknown as Response['status'],
+      json: jsonMock as unknown as Response['json'],
+    }
+  })
+
+  it('should return 401 if userId is missing', async () => {
+    mockReq = { params: { id: 'wf-1' }, body: {} }
+    await testWorkflowNode(mockReq as Request, mockRes as Response)
+    expect(statusMock).toHaveBeenCalledWith(401)
+  })
+
+  it('should return 400 if target node payload is missing', async () => {
+    mockReq = { userId: 'user-1', params: { id: 'wf-1' }, body: {} }
+    await testWorkflowNode(mockReq as Request, mockRes as Response)
+    expect(statusMock).toHaveBeenCalledWith(400)
+  })
+
+  it('should execute single node and return 200 with execution result', async () => {
+    const mockActionResult = {
+      success: true,
+      message: 'HTTP GET successful',
+      data: { id: 1 },
+      extractedVariables: { http_status: 200 },
+    }
+    vi.mocked(executeSingleNode).mockResolvedValueOnce(mockActionResult)
+
+    mockReq = {
+      userId: 'user-1',
+      params: { id: 'wf-1' },
+      body: {
+        node: {
+          id: 'n1',
+          type: 'action-http',
+          data: {
+            label: 'HTTP Request',
+            config: { method: 'GET', url: 'https://example.com' },
+          },
+        },
+        inputData: { subject: 'Hello' },
+      },
+    }
+
+    await testWorkflowNode(mockReq as Request, mockRes as Response)
+
+    expect(executeSingleNode).toHaveBeenCalledWith(
+      mockReq.body.node,
+      expect.objectContaining({
+        workflowId: 'wf-1',
+        data: { subject: 'Hello' },
+        isTestRun: true,
+      })
+    )
+    expect(statusMock).toHaveBeenCalledWith(200)
+    expect(jsonMock).toHaveBeenCalledWith({
+      status: 'SUCCESS',
+      message: 'HTTP GET successful',
+      result: mockActionResult,
+    })
   })
 })

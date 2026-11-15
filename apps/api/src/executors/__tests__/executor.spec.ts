@@ -808,4 +808,276 @@ describe('Executor Utilities', () => {
       )
     })
   })
+
+  describe('1:N Fan-Out, Diamond Merge, and {{var}} Condition Normalization', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    it('should execute multiple branches from condition true handle and normalize {{variable}} in condition field', async () => {
+      const uiConfig: UIConfig = {
+        nodes: [
+          {
+            id: 'trig-1',
+            type: 'trigger-webhook',
+            data: { label: 'Webhook', config: {} },
+          },
+          {
+            id: 'cond-1',
+            type: 'condition',
+            data: {
+              label: 'Status Check',
+              config: {
+                logicType: 'AND',
+                conditions: [
+                  { field: '{{status}}', operator: 'equals', value: 'paid' },
+                ],
+              } as ConditionConfig,
+            },
+          },
+          {
+            id: 'act-true-1',
+            type: 'action-url-decode',
+            data: {
+              label: 'True Branch 1',
+              config: {
+                inputText: 'https://example.com/%ED%95%9C%EA%B8%80',
+                outputVariable: 'var1',
+              } as UrlDecodeActionConfig,
+            },
+          },
+          {
+            id: 'act-true-2',
+            type: 'action-regex-replace',
+            data: {
+              label: 'True Branch 2',
+              config: {
+                inputText: 'paid_order',
+                rules: [{ pattern: 'paid', replacement: 'ok' }],
+                outputVariable: 'var2',
+              } as RegexReplaceActionConfig,
+            },
+          },
+          {
+            id: 'act-false-1',
+            type: 'action-regex-replace',
+            data: {
+              label: 'False Branch',
+              config: {
+                inputText: 'fail',
+                rules: [],
+                outputVariable: 'var3',
+              } as RegexReplaceActionConfig,
+            },
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 'trig-1', target: 'cond-1' },
+          {
+            id: 'e2',
+            source: 'cond-1',
+            sourceHandle: 'true',
+            target: 'act-true-1',
+          },
+          {
+            id: 'e3',
+            source: 'cond-1',
+            sourceHandle: 'true',
+            target: 'act-true-2',
+          },
+          {
+            id: 'e4',
+            source: 'cond-1',
+            sourceHandle: 'false',
+            target: 'act-false-1',
+          },
+        ],
+      }
+
+      const context: WorkflowContext = {
+        workflowId: 'wf-fanout',
+        triggerId: 'tr-1',
+        executionId: 'ex-fanout',
+        data: { status: 'paid' },
+        results: {},
+      }
+
+      const logs = await executeWorkflow(context, uiConfig)
+      const executedIds = logs?.map((l) => l.actionId)
+      expect(executedIds).toContain('cond-1')
+      expect(executedIds).toContain('act-true-1')
+      expect(executedIds).toContain('act-true-2')
+      expect(executedIds).not.toContain('act-false-1')
+    })
+
+    it('should wait for all active upstream branches on parallel diamond merge', async () => {
+      const uiConfig: UIConfig = {
+        nodes: [
+          {
+            id: 'trig-1',
+            type: 'trigger-webhook',
+            data: { label: 'Trigger', config: {} },
+          },
+          {
+            id: 'branch-b',
+            type: 'action-regex-replace',
+            data: {
+              label: 'Branch B',
+              config: {
+                inputText: 'B_DONE',
+                rules: [],
+                outputVariable: 'resB',
+              } as RegexReplaceActionConfig,
+            },
+          },
+          {
+            id: 'branch-c',
+            type: 'action-url-decode',
+            data: {
+              label: 'Branch C',
+              config: {
+                inputText: 'C%20DONE',
+                outputVariable: 'resC',
+              } as UrlDecodeActionConfig,
+            },
+          },
+          {
+            id: 'merge-d',
+            type: 'action',
+            data: {
+              label: 'Discord Merge',
+              config: {
+                webhookUrl: 'https://discord.com/api/webhooks/merge',
+                content: 'Merged: {{resB}} & {{resC}}',
+              } as DiscordActionConfig,
+            },
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 'trig-1', target: 'branch-b' },
+          { id: 'e2', source: 'trig-1', target: 'branch-c' },
+          { id: 'e3', source: 'branch-b', target: 'merge-d' },
+          { id: 'e4', source: 'branch-c', target: 'merge-d' },
+        ],
+      }
+
+      vi.mocked(axios.post).mockResolvedValueOnce({ status: 204, data: {} })
+
+      const context: WorkflowContext = {
+        workflowId: 'wf-diamond',
+        triggerId: 'tr-1',
+        executionId: 'ex-diamond',
+        data: {},
+        results: {},
+      }
+
+      const logs = await executeWorkflow(context, uiConfig)
+      const executedIds = logs?.map((l) => l.actionId)
+
+      expect(executedIds).toHaveLength(3)
+      expect(executedIds?.[2]).toBe('merge-d')
+      expect(axios.post).toHaveBeenCalledTimes(1)
+      expect(axios.post).toHaveBeenCalledWith(
+        'https://discord.com/api/webhooks/merge',
+        { content: 'Merged: B_DONE & C%20DONE' }
+      )
+    })
+
+    it('should execute merge node once when conditional sibling branch is skipped', async () => {
+      const uiConfig: UIConfig = {
+        nodes: [
+          {
+            id: 'trig-1',
+            type: 'trigger-webhook',
+            data: { label: 'Trigger', config: {} },
+          },
+          {
+            id: 'cond-1',
+            type: 'condition',
+            data: {
+              label: 'Cond',
+              config: {
+                conditions: [
+                  { field: 'flag', operator: 'equals', value: 'yes' },
+                ],
+              } as ConditionConfig,
+            },
+          },
+          {
+            id: 'branch-true',
+            type: 'action-regex-replace',
+            data: {
+              label: 'True Path',
+              config: {
+                inputText: 'FROM_TRUE',
+                rules: [],
+                outputVariable: 'pathResult',
+              } as RegexReplaceActionConfig,
+            },
+          },
+          {
+            id: 'branch-false',
+            type: 'action-regex-replace',
+            data: {
+              label: 'False Path',
+              config: {
+                inputText: 'FROM_FALSE',
+                rules: [],
+                outputVariable: 'pathResult',
+              } as RegexReplaceActionConfig,
+            },
+          },
+          {
+            id: 'merge-d',
+            type: 'action',
+            data: {
+              label: 'Merge Action',
+              config: {
+                webhookUrl: 'https://discord.com/api/webhooks/cond-merge',
+                content: 'Result={{pathResult}}',
+              } as DiscordActionConfig,
+            },
+          },
+        ],
+        edges: [
+          { id: 'e1', source: 'trig-1', target: 'cond-1' },
+          {
+            id: 'e2',
+            source: 'cond-1',
+            sourceHandle: 'true',
+            target: 'branch-true',
+          },
+          {
+            id: 'e3',
+            source: 'cond-1',
+            sourceHandle: 'false',
+            target: 'branch-false',
+          },
+          { id: 'e4', source: 'branch-true', target: 'merge-d' },
+          { id: 'e5', source: 'branch-false', target: 'merge-d' },
+        ],
+      }
+
+      vi.mocked(axios.post).mockResolvedValueOnce({ status: 204, data: {} })
+
+      const logs = await executeWorkflow(
+        {
+          workflowId: 'wf-cond-diamond',
+          triggerId: 'tr-1',
+          executionId: 'ex-cond-diamond',
+          data: { flag: 'yes' },
+          results: {},
+        },
+        uiConfig
+      )
+
+      const executedIds = logs?.map((l) => l.actionId)
+      expect(executedIds).toEqual(['cond-1', 'branch-true', 'merge-d'])
+      expect(axios.post).toHaveBeenCalledTimes(1)
+      expect(axios.post).toHaveBeenCalledWith(
+        'https://discord.com/api/webhooks/cond-merge',
+        { content: 'Result=FROM_TRUE' }
+      )
+    })
+  })
 })

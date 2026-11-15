@@ -15,6 +15,9 @@ export interface WorkflowContext {
   results: Record<string, ActionResult>
   retryCount?: number
   startNodeId?: string
+  completedNodeIds?: string[]
+  failedNodeId?: string
+  isTestRun?: boolean
 }
 
 export interface ActionResult {
@@ -84,7 +87,10 @@ export interface HttpActionConfig {
   url: string
   headers?: Record<string, string>
   body?: string
+  outputVariable?: string
+  statusVariable?: string
   responseMapping?: HttpResponseMapping[]
+  sampleResponse?: string
 }
 
 export interface RegexReplaceRule {
